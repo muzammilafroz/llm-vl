@@ -1,0 +1,1320 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Interactive labs for weeks 1-4 of IIT Madras BSDA5004 Large Language Models: self-attention, multi-head attention, masks, positional encoding, BatchNorm vs LayerNorm, decoding, sampling, GPT and BERT, with typeset math and live step-by-step working.">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css" crossorigin="anonymous">
+<script>window.LLMVL_KATEX_HTML=true;</script>
+<title>Transformer Visual Lab</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap">
+<style>
+/* Layout: a lab notebook. Sticky lab index on the left, one bench per concept on the right; every bench opens loaded with a past-paper preset. */
+:root{
+  --bg:#f3f5fa; --surface:#ffffff; --ink:#172038; --muted:#5a6480; --line:#d9deea; --chip:#ecf0fb;
+  --accent:#3451d1; --on-accent:#ffffff; --neg:#c4511a; --ok:#1f7a4d; --warn:#a64a06; --warn-bg:#fff3e2; --mask:#e6e9f2;
+  --f-head:"Space Grotesk","Segoe UI",system-ui,sans-serif;
+  --f-body:Inter,"Segoe UI",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",Consolas,ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0d1120; --surface:#151b2d; --ink:#e3e7f3; --muted:#9aa3bd; --line:#283049; --chip:#1d2540;
+  --accent:#8199ff; --on-accent:#0d1120; --neg:#ff8b4d; --ok:#5fd39a; --warn:#fdba74; --warn-bg:#36230f; --mask:#222a42; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0d1120; --surface:#151b2d; --ink:#e3e7f3; --muted:#9aa3bd; --line:#283049; --chip:#1d2540;
+  --accent:#8199ff; --on-accent:#0d1120; --neg:#ff8b4d; --ok:#5fd39a; --warn:#fdba74; --warn-bg:#36230f; --mask:#222a42; color-scheme:dark}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.55;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 56px}
+a{color:var(--accent)}
+.top{max-width:1200px;margin:0 auto;padding-block:28px 18px;display:flex;flex-wrap:wrap;gap:14px 24px;align-items:flex-end;justify-content:space-between;border-bottom:1px solid var(--line)}
+.top>div{min-width:0}
+.eyebrow{font:600 12px/1.3 var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 6px}
+h1{font:700 clamp(26px,4.2vw,40px)/1.08 var(--f-head);margin:0;letter-spacing:-.015em;text-wrap:balance}
+.lede{margin:10px 0 0;color:var(--muted);max-width:66ch}
+.jump{display:none;gap:8px;align-items:center;font-size:13px;color:var(--muted)}
+.layout{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:230px minmax(0,1fr);gap:30px;padding-top:22px}
+nav.side{position:sticky;top:12px;align-self:start;max-height:calc(100vh - 24px);overflow:auto;font-size:13.5px;padding-bottom:12px}
+nav.side h3{font:600 11px/1.3 var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:16px 8px 6px}
+nav.side h3:first-child{margin-top:0}
+nav.side a{display:flex;gap:8px;padding:5px 8px;border-radius:6px;color:var(--ink);text-decoration:none;line-height:1.35}
+nav.side a:hover{background:var(--chip)}
+nav.side a .n{font-family:var(--f-mono);font-size:12px;color:var(--muted);min-width:1.7em}
+@media (max-width:920px){.layout{grid-template-columns:minmax(0,1fr)} nav.side{display:none} .jump{display:flex}}
+main{min-width:0;display:flex;flex-direction:column;gap:26px}
+.lab{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px clamp(14px,2.6vw,28px) 22px;scroll-margin-top:12px;min-width:0}
+.lab-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.lab-no{font:600 12px var(--f-mono);color:var(--accent);letter-spacing:.07em;text-transform:uppercase}
+.lab h2{font:700 22px/1.2 var(--f-head);margin:0;text-wrap:balance}
+.meta{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 2px}
+.chip{font:500 11.5px/1.45 var(--f-mono);background:var(--chip);color:var(--muted);border-radius:999px;padding:3px 10px}
+.chip b{color:var(--ink);font-weight:600}
+.idea{max-width:72ch;margin:10px 0 14px}
+.sub{font:700 15px/1.3 var(--f-head);margin:20px 0 8px}
+.controls{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;margin:4px 0 14px}
+.preset{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 14px}
+.preset>span{font:600 11px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-right:2px}
+.seg{display:inline-flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{font:500 13px var(--f-body);background:transparent;color:var(--ink);border:0;padding:7px 12px;cursor:pointer}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button.on{background:var(--accent);color:var(--on-accent)}
+button.ghost{font:500 12.5px var(--f-body);background:var(--chip);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:5px 10px;cursor:pointer}
+button.ghost:hover{border-color:var(--accent)}
+button.act{font:600 13px var(--f-body);background:var(--accent);color:var(--on-accent);border:0;border-radius:7px;padding:7px 14px;cursor:pointer}
+button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+label.f{display:inline-flex;align-items:center;gap:8px;font-size:13.5px;color:var(--muted)}
+input[type=number],input[type=text],select{font:500 13.5px var(--f-mono);background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:5px 8px;max-width:100%}
+input[type=number]{width:7em}
+input[type=range]{accent-color:var(--accent);width:150px}
+input[type=checkbox]{accent-color:var(--accent);width:16px;height:16px}
+.row{display:flex;flex-wrap:wrap;gap:14px 20px;align-items:flex-start}
+.mat{margin:0;min-width:0;max-width:100%}
+.mat figcaption{font:600 12.5px var(--f-mono);margin-bottom:4px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.mat .dim{color:var(--muted);font-weight:400}
+.mwrap{overflow-x:auto;max-width:100%}
+.mat table{border-collapse:separate;border-spacing:2px;font:500 12.5px var(--f-mono);font-variant-numeric:tabular-nums}
+.mat td{min-width:3.4em;text-align:right;padding:4px 6px;background:var(--bg);border-radius:4px;white-space:nowrap}
+.mat td.sum{background:transparent;color:var(--muted);border:1px dashed var(--line)}
+.mat th{font:500 11px var(--f-mono);color:var(--muted);padding:2px 6px;text-align:right;white-space:nowrap}
+.mat td.ed{background:var(--chip);padding:2px 4px}
+.mat td.ed input{width:4.4em;font:500 12.5px var(--f-mono);text-align:right;background:transparent;border:0;color:var(--ink);padding:3px 2px}
+.mat td.ed input.bad{color:var(--neg)}
+.mat td.g0{background:color-mix(in oklab,var(--accent) 16%,var(--surface))}
+.mat td.g1{background:color-mix(in oklab,var(--neg) 16%,var(--surface))}
+.mat td.masked{background:var(--mask);color:var(--muted)}
+.mat td.allowed{background:color-mix(in oklab,var(--accent) 22%,var(--surface))}
+.flow{font:500 12.5px var(--f-mono);color:var(--muted);margin:12px 0;overflow-x:auto;white-space:nowrap;padding-bottom:4px}
+.flow b{color:var(--ink);font-weight:600}
+.warnbox{border-left:3px solid var(--warn);background:var(--warn-bg);padding:9px 13px;border-radius:0 8px 8px 0;font-size:13.5px;max-width:78ch;margin:12px 0}
+.callout{border-left:3px solid var(--accent);background:var(--chip);padding:9px 13px;border-radius:0 8px 8px 0;font-size:13.5px;max-width:78ch;margin:12px 0}
+dl.kv{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px;margin:12px 0;flex:1 1 320px;min-width:0}
+dl.kv div{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 11px;min-width:0}
+dl.kv dt{font-size:12px;color:var(--muted);line-height:1.35}
+dl.kv dd{margin:3px 0 0;font:600 16px/1.3 var(--f-mono);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+dl.kv dd small{font:400 11.5px var(--f-mono);color:var(--muted);display:block}
+dl.kv div.hit{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.ext{font-size:13px;color:var(--muted);margin:16px 0 0;display:flex;flex-wrap:wrap;gap:4px 14px}
+.ext b{font:600 11px var(--f-mono);letter-spacing:.06em;text-transform:uppercase}
+.split{display:flex;height:42px;border-radius:8px;overflow:hidden;border:1px solid var(--line);margin:10px 0 4px;max-width:640px}
+.split div{display:flex;align-items:center;justify-content:center;font:600 11.5px var(--f-mono);color:var(--on-accent);border-right:2px solid var(--surface);min-width:0;overflow:hidden;white-space:nowrap}
+.split div:last-child{border-right:0}
+.bars{display:grid;gap:5px;max-width:640px}
+.bar{display:grid;grid-template-columns:7.5em minmax(0,1fr) 4.6em;gap:10px;align-items:center;font:500 12.5px var(--f-mono)}
+.bar .lab-t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar .track{position:relative;height:18px;background:var(--bg);border-radius:4px;overflow:hidden}
+.bar .ghostbar{position:absolute;inset:0 auto 0 0;border-right:2px solid var(--muted);opacity:.55}
+.bar .fill{position:absolute;inset:0 auto 0 0;background:var(--accent);border-radius:4px}
+.bar.drop .fill{background:var(--mask)}
+.bar.drop .lab-t,.bar.drop .v{color:var(--muted);text-decoration:line-through}
+.bar .v{text-align:right;font-variant-numeric:tabular-nums}
+.hist{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.hist span{font:500 12px var(--f-mono);background:var(--chip);border-radius:5px;padding:2px 7px}
+canvas{display:block;max-width:100%}
+.figwrap{overflow-x:auto;max-width:100%}
+svg text{font-family:var(--f-mono)}
+.tf{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.tf section{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--bg);min-width:0}
+.tf h4{font:700 14px var(--f-head);margin:0 0 8px}
+.steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;font:500 12.5px var(--f-mono);text-align:center}
+.steps .h{font-size:11px;color:var(--muted)}
+.steps .c{padding:6px 4px;border-radius:6px;background:var(--surface);border:1px solid var(--line);overflow-wrap:anywhere}
+.steps .c.cur{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.steps .c.bad{color:var(--neg)}
+.steps .c.fut{opacity:.35}
+.small{font-size:12.5px;color:var(--muted)}
+.mono{font-family:var(--f-mono)}
+table.plain{border-collapse:collapse;font:500 12.5px var(--f-mono);font-variant-numeric:tabular-nums}
+table.plain th,table.plain td{padding:5px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+table.plain th{color:var(--muted);font-weight:500}
+table.plain td:first-child,table.plain th:first-child{text-align:left}
+footer{max-width:1200px;margin:30px auto 0;color:var(--muted);font-size:12.5px}
+body{margin:0}
+.k{font:600 11px/1.3 var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:16px 0 6px}
+.mathcard{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 16px 12px;margin:6px 0 10px;min-width:0}
+.mathcard>.k:first-child{margin-top:2px}
+.eq{overflow-x:auto;overflow-y:hidden;max-width:100%;padding:4px 0;margin:2px 0}
+.gloss{margin:8px 0 0;padding-left:18px;font-size:13.8px;display:grid;gap:4px;max-width:80ch}
+.gloss li::marker{color:var(--muted)}
+.why{font-size:13.8px;margin:10px 0 0;max-width:80ch}
+.worked{border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:0 10px 10px 0;padding:8px 14px 10px;margin:14px 0 4px;background:var(--surface);min-width:0}
+.worked>.k{margin:2px 0 4px;color:var(--accent)}
+.worked p{margin:6px 0;font-size:13.8px;max-width:80ch}
+.trap{border-left:3px solid var(--warn);background:var(--warn-bg);padding:9px 13px;border-radius:0 8px 8px 0;font-size:13.8px;max-width:80ch;margin:16px 0 0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px clamp(14px,2.6vw,28px)}
+.card h2{font:700 18px/1.2 var(--f-head);margin:0 0 10px}
+.symgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:6px 18px;font-size:13.8px}
+math{font-size:1.07em}
+.katex{font-size:1.06em}
+code.texfb{font:500 12.5px var(--f-mono);background:var(--chip);padding:1px 5px;border-radius:4px;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<header class="top">
+  <div>
+    <p class="eyebrow">BSDA5004 Large Language Models · Weeks 1–4 · Lectures L1–L25</p>
+    <h1>Transformer Visual Lab</h1>
+    <p class="lede">One bench per concept, each in four parts: <b>the math</b> (typeset, with every symbol explained), <b>try it</b> (change the inputs), <b>your numbers, step by step</b> (the formula redone live with what you entered), and the <b>exam trap</b>. Every bench opens on a past-paper or assignment example, so the numbers match the answer keys.</p>
+  </div>
+  <label class="jump" for="jump">Jump to
+    <select id="jump" aria-label="Jump to lab"></select>
+  </label>
+</header>
+
+<div class="layout">
+  <nav class="side" id="side" aria-label="Labs"></nav>
+  <main id="main">
+
+  <section class="card" id="symbols" aria-label="Symbols">
+    <h2>Symbols used on this page</h2>
+    <div class="symgrid">
+      <div><span class="m">T</span>: tokens in the sequence (context length)</div>
+      <div><span class="m">d_{model}</span>: width of every token vector</div>
+      <div><span class="m">h</span>: attention heads, with <span class="m">d_k=d_v=d_{model}/h</span></div>
+      <div><span class="m">d_{ff}</span>: hidden width of the feed-forward net</div>
+      <div><span class="m">B</span>: batch size; <span class="m">N</span>: layers per stack</div>
+      <div><span class="m">|V|</span>: vocabulary size</div>
+      <div><span class="m">H,\ Q,\ K,\ V</span>: inputs, queries, keys, values, one row per token</div>
+      <div><span class="m">A\in\mathbb{R}^{T\times T}</span>: attention weights; <span class="m">Z=AV</span></div>
+      <div><span class="m">M</span>: mask added before the softmax, entries <span class="m">0</span> or <span class="m">-\infty</span></div>
+    </div>
+    <p class="small" style="margin:10px 0 0">Convention: row vectors, as in the course notes. The MultiHeadAttention deck writes the transposed (column) form; Lab 3 shows both side by side.</p>
+  </section>
+
+  <!-- LAB 1 -->
+  <section class="lab" id="lab1" data-week="Transformer">
+    <div class="lab-head"><span class="lab-no">Lab 1</span><h2>Self-attention by hand</h2></div>
+    <div class="meta"><span class="chip">L3</span><span class="chip">Note 01 §3–5, Example 1</span><span class="chip">Past papers <b>H</b>: GA1 Q3 · 2025T2-Q12–14 · 2026T2-Q2–3</span></div>
+    <p class="idea">Every token asks a question (its query), compares it with every token's key, turns the scores into weights with a softmax, and takes the weighted sum of the values. Row <i>i</i> of the weight matrix is token <i>i</i>'s attention, so each row must sum to 1.</p>
+    <div class="mathcard"><p class="k">The math</p>
+      <div class="m d">Q = HW_Q,\qquad K = HW_K,\qquad V = HW_V</div>
+      <div class="m d">A=\operatorname{softmax}_{\text{row}}\!\left(\frac{QK^{\top}}{\sqrt{d_k}}\right),\qquad Z = AV</div>
+      <div class="m d">e_{ij}=\frac{q_i\cdot k_j}{\sqrt{d_k}},\qquad \alpha_{ij}=\frac{\exp(e_{ij})}{\sum_{l=1}^{T}\exp(e_{il})},\qquad z_i=\sum_{j=1}^{T}\alpha_{ij}\,v_j</div>
+      <ul class="gloss">
+        <li><span class="m">H\in\mathbb{R}^{T\times d_{model}}</span> has one row per token.</li>
+        <li><span class="m">W_Q, W_K, W_V\in\mathbb{R}^{d_{model}\times d_k}</span>, so <span class="m">Q, K, V\in\mathbb{R}^{T\times d_k}</span>.</li>
+        <li><span class="m">e_{ij}</span> is how well query <span class="m">i</span> matches key <span class="m">j</span>. Row <span class="m">i</span> of <span class="m">A</span> turns those scores into weights that sum to 1.</li>
+        <li><span class="m">z_i</span> is a weighted average of the value vectors, so <span class="m">Z\in\mathbb{R}^{T\times d_v}</span>.</li>
+      </ul>
+      <p class="why"><b>Why divide by <span class="m">\sqrt{d_k}</span>?</b> If the entries of <span class="m">q_i</span> and <span class="m">k_j</span> are independent with mean 0 and variance 1, then <span class="m">\operatorname{Var}(q_i\cdot k_j)=d_k</span>. Large scores push the softmax towards a one-hot vector whose gradients are almost zero. Dividing by <span class="m">\sqrt{d_k}</span> brings the variance back to 1.</p>
+    </div>
+    <p class="k">Try it</p>
+    <div id="b1"></div>
+    <p class="trap"><b>Exam trap.</b> The softmax runs along each <b>row</b> (over keys). GA questions often say "ignore the scaling": read for it. If your row-wise answer isn't among the options, the key may have used columns, as GA1 Q3 and 2025T2-Q13–15 did.</p>
+    <p class="ext"><b>See also</b> <a href="https://poloclub.github.io/transformer-explainer/" target="_blank" rel="noopener">Transformer Explainer</a> <a href="https://jalammar.github.io/illustrated-transformer/" target="_blank" rel="noopener">The Illustrated Transformer</a> <a href="https://www.3blue1brown.com/lessons/attention" target="_blank" rel="noopener">3Blue1Brown: Attention</a></p>
+  </section>
+
+  <!-- LAB 2 -->
+  <section class="lab" id="lab2" data-week="Transformer">
+    <div class="lab-head"><span class="lab-no">Lab 2</span><h2>Attention counts and the causal mask</h2></div>
+    <div class="meta"><span class="chip">L6 · L9</span><span class="chip">Note 02 §3</span><span class="chip">Past papers <b>G</b>: 2025T3-Q14, Q15, Q17, Q18 · 2026T2-Q4, Q6</span></div>
+    <p class="idea">Each head scores every query against every key: T × T numbers. The decoder's causal mask sets everything above the diagonal to −∞, so token <i>i</i> only sees tokens 1…<i>i</i>. Most counting questions are one of the formulas on the right.</p>
+    <div class="mathcard"><p class="k">The math</p>
+      <div class="m d">M_{ij}=\begin{cases}0 &amp; j\le i\\ -\infty &amp; j&gt;i\end{cases}\qquad A=\operatorname{softmax}\!\left(\frac{QK^{\top}}{\sqrt{d_k}}+M\right),\qquad e^{-\infty}=0</div>
+      <div class="m d">\text{kept}=\sum_{i=1}^{T} i=\frac{T(T+1)}{2},\qquad \text{masked}=T^2-\frac{T(T+1)}{2}=\frac{T(T-1)}{2}</div>
+      <div class="m d">\text{scores in a batch}=B\cdot h\cdot T^2,\qquad \text{next-token targets}=B\,(T-1)</div>
+      <ul class="gloss">
+        <li>Query <span class="m">i</span> may look at keys <span class="m">1,\dots,i</span>: that is <span class="m">i</span> cells in row <span class="m">i</span>. Adding the rows gives the triangle number.</li>
+        <li>Adding <span class="m">-\infty</span> before the softmax makes those weights exactly 0, so the future never leaks in.</li>
+        <li>Every head scores its own <span class="m">T\times T</span> grid, and every sequence in the batch has its own heads.</li>
+        <li>With no BOS token, the last token has nothing after it to predict: <span class="m">T-1</span> targets per sequence.</li>
+      </ul>
+    </div>
+    <p class="k">Try it</p>
+    <div id="b2"></div>
+    <p class="trap"><b>Exam trap.</b> "Non-zero scores" means the <b>kept</b> cells, <span class="m">T(T+1)/2</span>, including the diagonal. "Masked entries" is <span class="m">T(T-1)/2</span>. Batch size and the number of heads are often distractors when the question says "per head, one sequence".</p>
+    <p class="ext"><b>See also</b> <a href="https://jalammar.github.io/illustrated-gpt2/" target="_blank" rel="noopener">The Illustrated GPT-2 (masked self-attention)</a></p>
+  </section>
+
+  <!-- LAB 3 -->
+  <section class="lab" id="lab3" data-week="Transformer">
+    <div class="lab-head"><span class="lab-no">Lab 3</span><h2>Multi-head attention</h2></div>
+    <div class="meta"><span class="chip">L4</span><span class="chip">Note 01 §6, Examples 3–4</span><span class="chip">Past papers <b>A</b> <b>H</b>: GA1 Q1 · 2025T1-Q10–11 · 2025T3-Q16, Q19 · 2025T2-Q13–15</span></div>
+    <p class="idea">The model width d<sub>model</sub> is cut into h slices of d<sub>k</sub> = d<sub>model</sub>/h. Each head runs its own attention in its slice, the outputs are concatenated back to d<sub>model</sub>, and W<sub>O</sub> mixes them. The parameter count does not depend on h.</p>
+    <div class="mathcard"><p class="k">The math</p>
+      <div class="m d">d_k=d_v=\frac{d_{model}}{h},\qquad \text{head}_i=\operatorname{softmax}\!\left(\frac{Q_iK_i^{\top}}{\sqrt{d_k}}\right)V_i\in\mathbb{R}^{T\times d_v}</div>
+      <div class="m d">\operatorname{MHA}(H)=\big[\,\text{head}_1\;\big|\;\cdots\;\big|\;\text{head}_h\,\big]\,W_O,\qquad W_O\in\mathbb{R}^{h d_v\times d_{model}}</div>
+      <div class="m d">\#\text{params}=\underbrace{h\cdot 3\,d_{model}\,d_k}_{W_Q,\,W_K,\,W_V}+\underbrace{h\,d_v\,d_{model}}_{W_O}=3d_{model}^2+d_{model}^2=4d_{model}^2</div>
+      <ul class="gloss">
+        <li>Each head has its own <span class="m">W_Q^{i}, W_K^{i}, W_V^{i}\in\mathbb{R}^{d_{model}\times d_k}</span>, so it can attend to a different relation, such as syntax in one head and who-refers-to-whom in another.</li>
+        <li>The concatenation is <span class="m">T\times h d_v = T\times d_{model}</span>, and <span class="m">W_O</span> mixes the heads back together.</li>
+        <li>Doubling <span class="m">h</span> halves <span class="m">d_k</span>. The cost and the parameter count stay the same; only the number of attention patterns grows.</li>
+      </ul>
+    </div>
+    <p class="k">Try it</p>
+    <div id="b3"></div>
+    <p class="trap"><b>Exam trap.</b> Check whether the question includes <span class="m">W_O</span> (2025T1-Q10 excludes it: <span class="m">3d_{model}^2</span>). The course counts no attention biases. One head's <span class="m">W_Q</span> is <span class="m">d_{model}\times d_k</span>, not <span class="m">d_{model}\times d_{model}</span>.</p>
+    <p class="ext"><b>See also</b> <a href="https://jalammar.github.io/illustrated-transformer/" target="_blank" rel="noopener">The Illustrated Transformer (multi-headed attention)</a> <a href="https://poloclub.github.io/transformer-explainer/" target="_blank" rel="noopener">Transformer Explainer</a></p>
+  </section>
+
+  <!-- LAB 4 -->
+  <section class="lab" id="lab4" data-week="Transformer">
+    <div class="lab-head"><span class="lab-no">Lab 4</span><h2>BatchNorm vs LayerNorm</h2></div>
+    <div class="meta"><span class="chip">L8 · L10</span><span class="chip">Note 02 §10, Example 4b</span><span class="chip">Past papers <b>B</b>: 2024T3-Q8–11 · 2025T1-Q12–15 · 2025T2-Q17–18 · 2025T3-Q7</span></div>
+    <p class="idea">Same matrix, different axis. BatchNorm normalises each <b>feature</b> across the samples in the batch. LayerNorm normalises each <b>sample</b> across its own features. Read the question's orientation sentence first, then pick the axis.</p>
+    <div class="mathcard"><p class="k">The math</p>
+      <div class="m d">\textbf{BN}\ (\text{feature } j \text{ over } m \text{ samples}):\quad \mu_j=\frac1m\sum_{i=1}^{m}x_{ij},\qquad \sigma_j^2=\frac1m\sum_{i=1}^{m}\big(x_{ij}-\mu_j\big)^2</div>
+      <div class="m d">\textbf{LN}\ (\text{sample } i \text{ over } H \text{ features}):\quad \mu_i=\frac1H\sum_{j=1}^{H}x_{ij},\qquad \sigma_i^2=\frac1H\sum_{j=1}^{H}\big(x_{ij}-\mu_i\big)^2</div>
+      <div class="m d">\hat x=\frac{x-\mu}{\sqrt{\sigma^2+\epsilon}},\qquad y=\gamma\,\hat x+\beta,\qquad \gamma,\beta\in\mathbb{R}^{H}\ \Rightarrow\ 2H \text{ learnable parameters}</div>
+      <div class="m d">\sum_{k=1}^{n}\frac{x_k-\mu}{\sigma}=\frac{\left(\sum_k x_k\right)-n\mu}{\sigma}=\frac{n\mu-n\mu}{\sigma}=0</div>
+      <ul class="gloss">
+        <li>Here <span class="m">x_{ij}</span> is sample <span class="m">i</span>, feature <span class="m">j</span>. Which way that runs on the page depends on the question's orientation sentence.</li>
+        <li>BN depends on the batch: with batch size 1 every <span class="m">\sigma_j=0</span>. LN uses one sample's own features, which is why transformers use LN.</li>
+        <li>The last line is why "the sum of a normalised row (BN) or column (LN)" is always 0.</li>
+      </ul>
+    </div>
+    <p class="k">Try it</p>
+    <div id="b4"></div>
+    <p class="trap"><b>Exam trap.</b> The axis. Find "each column represents a sample" or "rows represent samples" first. σ uses <span class="m">1/m</span>, not <span class="m">1/(m-1)</span>. Two past keys got this wrong (2025T1-Q14/Q15 swapped; 2024T3-Q10/Q11 computed for a different matrix).</p>
+  </section>
+
+  <!-- LAB 5 -->
+  <section class="lab" id="lab5" data-week="Transformer">
+    <div class="lab-head"><span class="lab-no">Lab 5</span><h2>Sinusoidal positional encoding</h2></div>
+    <div class="meta"><span class="chip">L5 · L7</span><span class="chip">Note 02 §7–8, Example 3</span><span class="chip">Past papers <b>F</b>: GA3 Q1 · 2024T3-Q20 · 2025T2-Q10 · 2026T1-Q11 · 2026T2-Q7</span></div>
+    <p class="idea">Each pair of dimensions (2i, 2i+1) is a sine and cosine at its own frequency 1/10000<sup>2i/d</sup>. Early dimensions oscillate fast, late ones barely move, so every position gets a unique pattern. Nothing here is learned.</p>
+    <div class="mathcard"><p class="k">The math</p>
+      <div class="m d">PE_{(pos,\,2i)}=\sin\!\left(\frac{pos}{10000^{2i/d_{model}}}\right),\qquad PE_{(pos,\,2i+1)}=\cos\!\left(\frac{pos}{10000^{2i/d_{model}}}\right)</div>
+      <div class="m d">\omega_i=10000^{-2i/d_{model}}:\qquad \omega_0=1\ \ (\text{period }2\pi\approx6.3\text{ positions})\ \ \longrightarrow\ \ \omega_{d/2-1}\approx10^{-4}\ \ (\text{period}\approx 63{,}000)</div>
+      <div class="m d">\lVert PE_{pos}\rVert^2=\sum_{i=0}^{d/2-1}\big(\sin^2\theta_i+\cos^2\theta_i\big)=\frac{d_{model}}{2}\quad\text{for every }pos</div>
+      <div class="m d">\begin{bmatrix}\sin\omega(p+k)\\ \cos\omega(p+k)\end{bmatrix}=\begin{bmatrix}\cos\omega k &amp; \sin\omega k\\ -\sin\omega k &amp; \cos\omega k\end{bmatrix}\begin{bmatrix}\sin\omega p\\ \cos\omega p\end{bmatrix}</div>
+      <ul class="gloss">
+        <li>Element <span class="m">j</span> belongs to pair <span class="m">i=\lfloor j/2\rfloor</span>. Even <span class="m">j</span> uses sin, odd <span class="m">j</span> uses cos, and both use the same angle <span class="m">\theta_i=pos\cdot\omega_i</span>.</li>
+        <li>PE is added to the word embedding (<span class="m">x+PE</span>), so it has the same width <span class="m">d_{model}</span>. The whole table is <span class="m">T\times d_{model}</span>, with 0 parameters.</li>
+        <li>The rotation identity (beyond slides): moving <span class="m">k</span> positions rotates each (sin, cos) pair by a fixed angle that doesn't depend on <span class="m">p</span>. That is how relative offsets become visible to attention.</li>
+      </ul>
+    </div>
+    <p class="k">Try it</p>
+    <div id="b5"></div>
+    <p class="trap"><b>Exam trap.</b> Use radians. Use the position exactly as given. For element <span class="m">j</span>, the exponent uses <span class="m">2i=2\lfloor j/2\rfloor</span>, not <span class="m">j</span> (2026T1-Q11: element 5 → <span class="m">\cos(3/10000^{4/128})</span>). Sinusoidal PE has <b>0</b> learnable parameters.</p>
+    <p class="ext"><b>See also</b> <a href="https://kazemnejad.com/blog/transformer_architecture_positional_encoding/" target="_blank" rel="noopener">Kazemnejad: Transformer positional encoding</a> <a href="https://jalammar.github.io/illustrated-transformer/" target="_blank" rel="noopener">The Illustrated Transformer (positional encoding)</a></p>
+  </section>
+
+  <!-- LAB 6 -->
+  <section class="lab" id="lab6" data-week="Decoding">
+    <div class="lab-head"><span class="lab-no">Lab 6</span><h2>Decoding explorer: greedy, beam, exhaustive</h2></div>
+    <div class="meta"><span class="chip">L17 · L19 · L20</span><span class="chip">Note 04 §3–7, WE2</span><span class="chip">Past papers <b>D</b>: 2025T1-Q7–8 · 2025T2-Q19–20 · 2025T3-Q6, Q8, Q9 · 2026T2-Q14, Q16</span></div>
+    <p class="idea">A toy model with three tokens and three steps. Greedy keeps one path and can miss the best sequence. Beam search keeps the k best partial sequences by joint probability. Exhaustive search scores all |V|<sup>L</sup> sequences.</p>
+    <div class="mathcard"><p class="k">The math</p>
+      <div class="m d">P(w_{1:L})=\prod_{t=1}^{L}P(w_t\mid w_{&lt;t}),\qquad \log P(w_{1:L})=\sum_{t=1}^{L}\log P(w_t\mid w_{&lt;t})</div>
+      <div class="m d">\text{greedy: } w_t=\arg\max_{w}P(w\mid w_{&lt;t}),\qquad \text{beam }k\text{: keep the }k\text{ prefixes with the largest }\prod_{s\le t}P(w_s\mid w_{&lt;s})</div>
+      <div class="m d">\#\text{sequences of length }L=|V|^{L},\qquad \#\text{exhaustive decoder runs}=\sum_{t=1}^{L}|V|^{t-1}=\frac{|V|^{L}-1}{|V|-1}</div>
+      <ul class="gloss">
+        <li>At step <span class="m">t</span>, exhaustive search runs the decoder once for each of the <span class="m">|V|^{t-1}</span> prefixes. Greedy runs once; beam runs <span class="m">k</span> times and scores <span class="m">k\,|V|</span> candidates.</li>
+        <li>Greedy commits early: a slightly less likely first word can lead to a much more likely sentence. Beam search hedges by keeping <span class="m">k</span> candidates.</li>
+        <li>Length normalisation, <span class="m">\tfrac{1}{L}\sum_t\log P</span>, stops beam search preferring short outputs.</li>
+      </ul>
+    </div>
+    <p class="k">Try it</p>
+    <div id="b6"></div>
+    <p class="trap"><b>Exam trap.</b> Decoder runs at step <span class="m">t</span> are <span class="m">|V|^{t-1}</span>, not <span class="m">|V|^{t}</span>. The total for <span class="m">L</span> steps is the sum (2026T2-Q14: <span class="m">1+7+49+343=400</span>). Paths kept at step <span class="m">t</span> are 1 (greedy), <span class="m">k</span> (beam) and <span class="m">|V|^t</span> (exhaustive).</p>
+    <p class="ext"><b>See also</b> <a href="https://huggingface.co/blog/how-to-generate" target="_blank" rel="noopener">Hugging Face: How to generate text</a></p>
+  </section>
+
+  <!-- LAB 7 -->
+  <section class="lab" id="lab7" data-week="Decoding">
+    <div class="lab-head"><span class="lab-no">Lab 7</span><h2>Sampling: top-k, top-p, temperature</h2></div>
+    <div class="meta"><span class="chip">L18 · L22</span><span class="chip">Note 04 §9–11</span><span class="chip">Past papers <b>E</b>: GA4 Q1d · 2025T2-Q4, Q9, Q11, Q21 · 2025T3-Q10 · 2026T1-Q6 · 2026T2-Q15</span></div>
+    <p class="idea">Temperature reshapes the distribution without changing the ranking. Top-k keeps the k most likely tokens; top-p keeps the smallest set whose probability reaches p. Both then <b>renormalise</b> and sample, which is why they are the only non-deterministic strategies.</p>
+    <div class="mathcard"><p class="k">The math</p>
+      <div class="m d">\text{top-}k:\quad \tilde P(w)=\begin{cases}\dfrac{P(w)}{\sum_{w'\in V^{(k)}}P(w')} &amp; w\in V^{(k)}\\[6pt] 0 &amp; \text{otherwise}\end{cases}</div>
+      <div class="m d">\text{top-}p:\quad V^{(p)}=\text{the smallest set of most-likely tokens with }\sum_{w\in V^{(p)}}P(w)\ \ge\ p,\ \text{then renormalise as above}</div>
+      <div class="m d">\text{temperature}:\quad P_T(w_i)=\frac{e^{u_i/T}}{\sum_j e^{u_j/T}}=\frac{p_i^{1/T}}{\sum_j p_j^{1/T}},\qquad T\to0:\ \text{argmax},\qquad T\to\infty:\ \text{uniform}</div>
+      <ul class="gloss">
+        <li><span class="m">u_i</span> are logits and <span class="m">p_i</span> the probabilities at <span class="m">T=1</span>. Both forms of the temperature formula give the same distribution.</li>
+        <li>Dividing logits by <span class="m">T</span> keeps their order, so temperature changes how peaked the distribution is, never which token is most likely.</li>
+        <li>Top-<span class="m">k</span> with <span class="m">k=1</span> is greedy. Top-<span class="m">p</span> adapts: a peaked distribution keeps few tokens, a flat one keeps many.</li>
+      </ul>
+    </div>
+    <p class="k">Try it</p>
+    <div id="b7"></div>
+    <p class="trap"><b>Exam trap.</b> Renormalise: divide by the kept mass, not by 1 (GA4 Q1d: <span class="m">0.41/0.64=0.6406</span>). Only the sampling methods are non-deterministic; greedy, beam and exhaustive always give the same output.</p>
+    <p class="ext"><b>See also</b> <a href="https://huggingface.co/blog/how-to-generate" target="_blank" rel="noopener">Hugging Face: How to generate text</a> <a href="https://poloclub.github.io/transformer-explainer/" target="_blank" rel="noopener">Transformer Explainer (temperature slider)</a></p>
+  </section>
+
+  <!-- LAB 8 -->
+  <section class="lab" id="lab8" data-week="Transformer">
+    <div class="lab-head"><span class="lab-no">Lab 8</span><h2>Teacher forcing vs inference</h2></div>
+    <div class="meta"><span class="chip">L9</span><span class="chip">Note 02 §2</span><span class="chip">Past papers <b>I</b>: 2024T3-Q2 · 2025T1-Q3 · 2025T3-Q3, Q5 · 2026T2-Q8</span></div>
+    <p class="idea">In training, the decoder is fed the <b>true</b> previous token at every step (the target shifted right), so all positions run in one masked pass. At inference there is no target: the model feeds back its own predictions, one pass per token, and an early mistake carries forward.</p>
+    <div class="mathcard"><p class="k">The math</p>
+      <div class="m d">\text{training: }\ \mathcal{L}=-\sum_{t=1}^{T}\log P\big(y_t\mid \underbrace{y_1,\dots,y_{t-1}}_{\text{true tokens}},\,x\big)\qquad\text{(all positions in one masked pass)}</div>
+      <div class="m d">\text{inference: }\ \hat y_t=\arg\max_{w}P\big(w\mid \underbrace{\hat y_1,\dots,\hat y_{t-1}}_{\text{its own predictions}},\,x\big)\qquad\text{(one pass per generated token)}</div>
+      <ul class="gloss">
+        <li>Decoder input in training = target shifted right: <span class="m">\langle\text{go}\rangle, y_1, \dots, y_{T-1}</span>. The causal mask stops position <span class="m">t</span> from seeing <span class="m">y_t</span>.</li>
+        <li>Without teacher forcing, one early mistake would feed every later step, making training slow and unstable.</li>
+        <li>The gap between training on true prefixes and generating from its own is called exposure bias.</li>
+      </ul>
+    </div>
+    <p class="k">Try it</p>
+    <div id="b8"></div>
+    <p class="trap"><b>Exam trap.</b> Under teacher forcing, the input at step <span class="m">t</span> is the <b>true</b> <span class="m">y_{t-1}</span>, whatever the model predicted before (2025T3-Q3). Training needs 1 decoder pass; inference needs one per output token, plus one for the end token if it must be generated.</p>
+    <p class="ext"><b>See also</b> <a href="https://nlp.seas.harvard.edu/annotated-transformer/" target="_blank" rel="noopener">The Annotated Transformer</a></p>
+  </section>
+
+  <!-- LAB 9 -->
+  <section class="lab" id="lab9" data-week="Transformer">
+    <div class="lab-head"><span class="lab-no">Lab 9</span><h2>Encoder–decoder: data flow and parameters</h2></div>
+    <div class="meta"><span class="chip">L2 · L6 · L8 · L10</span><span class="chip">Note 02 §11–12, Example 5</span><span class="chip">Past papers <b>A</b>: GA2 Q1 · 2024T3-Q4–6 · 2025T1-Q9</span></div>
+    <p class="idea">The encoder layer is attention, then a feed-forward net, each wrapped in Add &amp; Norm. The decoder layer adds a second attention block whose queries come from the decoder and whose keys and values come from the encoder output. That is why a decoder layer has 2 attention blocks and 3 LayerNorms.</p>
+    <div class="mathcard"><p class="k">The math</p>
+      <div class="m d">\text{MHA}=3h\,d_{model}\,d_k+h\,d_v\,d_{model}\ \big(=4d_{model}^2\big),\qquad \text{FFN}=2\,d_{model}\,d_{ff}\ \big(+\,d_{ff}+d_{model}\text{ with biases}\big),\qquad \text{LN}=2\,d_{model}</div>
+      <div class="m d">\text{encoder layer}=\text{MHA}+\text{FFN}+2\,\text{LN},\qquad \text{decoder layer}=\underbrace{2\,\text{MHA}}_{\text{masked + cross}}+\text{FFN}+3\,\text{LN}</div>
+      <div class="m d">\text{embedding}=|V|\,d_{model},\qquad \text{output layer}=d_{model}\,|V_{tgt}|,\qquad \text{sinusoidal PE}=0</div>
+      <ul class="gloss">
+        <li>Add &amp; Norm is <span class="m">\operatorname{LN}\big(x+\text{Sublayer}(x)\big)</span>. The residual add has no parameters; each LN has <span class="m">\gamma,\beta\in\mathbb{R}^{d_{model}}</span>.</li>
+        <li>Cross-attention has the same weight shapes as self-attention. Only the source of K and V changes (the encoder output).</li>
+        <li>The FFN acts on each position separately: <span class="m">\max(0,\,xW_1+b_1)\,W_2+b_2</span> with <span class="m">W_1\in\mathbb{R}^{d_{model}\times d_{ff}}</span>.</li>
+      </ul>
+    </div>
+    <p class="k">Try it</p>
+    <div id="b9"></div>
+    <p class="trap"><b>Exam trap.</b> A decoder layer has <b>2</b> attention blocks and <b>3</b> LayerNorms. Check whether biases count, and whether the question wants embeddings and the output layer included (GA2 asks for them separately).</p>
+    <p class="ext"><b>See also</b> <a href="https://jalammar.github.io/illustrated-transformer/" target="_blank" rel="noopener">The Illustrated Transformer</a> <a href="https://nlp.seas.harvard.edu/annotated-transformer/" target="_blank" rel="noopener">The Annotated Transformer</a></p>
+  </section>
+
+  <!-- LAB 10 -->
+  <section class="lab" id="lab10" data-week="Transformer">
+    <div class="lab-head"><span class="lab-no">Lab 10</span><h2>Seq2seq (Bahdanau) attention</h2></div>
+    <div class="meta"><span class="chip">L1 · L2</span><span class="chip">Note 01 §1</span><span class="chip">Past papers <b>H</b>: 2026T1-Q12–14 · 2026T2-Q1 · 2025T1-Q5</span></div>
+    <p class="idea">Before transformers, an RNN decoder at step t scored every encoder state h<sub>j</sub> against its own state s<sub>t−1</sub>, turned the scores into weights α with a softmax, and used the weighted sum of encoder states as its context vector. Self-attention keeps the idea and swaps the scoring network for a dot product.</p>
+    <div class="mathcard"><p class="k">The math</p>
+      <div class="m d">e_{tj}=V_a^{\top}\tanh\!\big(U_{att}\,s_{t-1}+W_{att}\,h_j\big),\qquad \alpha_{tj}=\frac{\exp(e_{tj})}{\sum_{l=1}^{T_s}\exp(e_{tl})},\qquad c_t=\sum_{j=1}^{T_s}\alpha_{tj}\,h_j</div>
+      <ul class="gloss">
+        <li><span class="m">s_{t-1}</span> is the decoder's state before emitting word <span class="m">t</span>; <span class="m">h_j</span> is the encoder state of source word <span class="m">j</span>.</li>
+        <li><span class="m">\alpha_t</span> is a distribution over the source words (it sums to 1). <span class="m">c_t</span> is a fresh context vector for every target word, instead of one fixed vector for the whole sentence.</li>
+        <li>Self-attention keeps the recipe but scores with a dot product of learned projections, <span class="m">e_{ij}=q_i\cdot k_j/\sqrt{d_k}</span>, and drops the recurrence.</li>
+      </ul>
+    </div>
+    <p class="k">Try it</p>
+    <div id="b10"></div>
+    <p class="trap"><b>Exam trap.</b> The softmax denominator includes <b>all</b> encoder states. The context vector is a weighted sum of <b>encoder</b> states, not decoder states (2026T2-Q1).</p>
+    <p class="ext"><b>See also</b> <a href="https://jalammar.github.io/visualizing-neural-machine-translation-mechanics-of-seq2seq-models-with-attention/" target="_blank" rel="noopener">Visualizing a neural machine translation model</a></p>
+  </section>
+
+  <!-- LAB 11 -->
+  <section class="lab" id="lab11" data-week="LM & GPT">
+    <div class="lab-head"><span class="lab-no">Lab 11</span><h2>Sequence probability from a model's table</h2></div>
+    <div class="meta"><span class="chip">L11 · L14 · L20</span><span class="chip">Note 03 §2–3 · Note 04 §1, WE1</span><span class="chip">Past papers <b>C</b>: GA4 Q1 · 2024T3-Q12–14 · 2026T2-Q9–11, Q13</span></div>
+    <p class="idea">A language model gives P(next token | tokens so far). The probability of a sentence is the product of those conditionals. A table like this is computed along one particular prefix, so the moment your sentence leaves that prefix, the later rows no longer apply.</p>
+    <div class="mathcard"><p class="k">The math</p>
+      <div class="m d">P(x_1,\dots,x_L)=P(x_1)\,P(x_2\mid x_1)\cdots P(x_L\mid x_1,\dots,x_{L-1})=\prod_{t=1}^{L}P(x_t\mid x_{&lt;t})</div>
+      <div class="m d">\text{row } t \text{ of the table}=P\big(\,\cdot\mid \text{the prefix it was computed on}\big)</div>
+      <ul class="gloss">
+        <li>The chain rule is exact. A language model learns each conditional factor, and the sentence probability is their product.</li>
+        <li>A decoding table is computed along one prefix (here the greedy one). Once your sentence differs from that prefix, later rows are conditionals of a different sentence.</li>
+        <li>Logs turn the product into a sum, which is what beam search and the training loss use.</li>
+      </ul>
+    </div>
+    <p class="k">Try it</p>
+    <div id="b11"></div>
+    <p class="trap"><b>Exam trap.</b> The <b>−1 (insufficient information)</b> answer. Before multiplying, check that every factor you need is a conditional on <i>your</i> prefix (2024T3-Q14, 2026T2-Q11).</p>
+  </section>
+
+  <!-- LAB 12 -->
+  <section class="lab" id="lab12" data-week="LM & GPT">
+    <div class="lab-head"><span class="lab-no">Lab 12</span><h2>Who can see whom: the three attention masks</h2></div>
+    <div class="meta"><span class="chip">L6 · L13</span><span class="chip">Note 02 §3–4 · Note 03 §4</span><span class="chip">Past papers <b>I</b>: 2026T1-Q4, Q10 · 2025T3-Q4, Q12</span></div>
+    <p class="idea">Encoder self-attention lets every token see every token. Decoder self-attention is causal. Cross-attention lets each target position see the whole source, so it needs no causal mask, only a padding mask for empty source slots.</p>
+    <div class="mathcard"><p class="k">The math</p>
+      <div class="m d">M^{enc}_{ij}=0,\qquad M^{dec}_{ij}=\begin{cases}0 &amp; j\le i\\ -\infty &amp; j&gt;i\end{cases},\qquad M^{cross}_{ij}=0\quad(\text{only [PAD] columns get }-\infty)</div>
+      <div class="m d">Q_{dec}\in\mathbb{R}^{T_t\times d_k},\quad K_{enc},V_{enc}\in\mathbb{R}^{T_s\times d_k}\ \Rightarrow\ Q_{dec}K_{enc}^{\top}\in\mathbb{R}^{T_t\times T_s},\quad \text{output}\in\mathbb{R}^{T_t\times d_v}</div>
+      <ul class="gloss">
+        <li>The encoder reads a sentence that already exists, so every token may look at every other token.</li>
+        <li>The decoder writes left to right, so position <span class="m">i</span> must not see target words after it.</li>
+        <li>Cross-attention looks at the source, which is fully known, so there is nothing to hide except padding.</li>
+      </ul>
+    </div>
+    <p class="k">Try it</p>
+    <div id="b12"></div>
+    <p class="trap"><b>Exam trap.</b> "Is causal masking applied in cross-attention?" No; only a padding mask (2026T1-Q4 → c). The cross-attention score matrix is <span class="m">T_t\times T_s</span>, not square.</p>
+  </section>
+
+  <!-- LAB 13 -->
+  <section class="lab" id="lab13" data-week="LM & GPT">
+    <div class="lab-head"><span class="lab-no">Lab 13</span><h2>GPT: pre-training to fine-tuning</h2></div>
+    <div class="meta"><span class="chip">L12 · L14 · L15 · L16</span><span class="chip">Note 03 §5–11</span><span class="chip">Past papers <b>A</b> <b>I</b>: GA3 Q3–Q5 · 2024T3-Q16–18 · 2025T1-Q6 · 2025T3-Q17 · 2026T1-Q15–19 · 2026T2-Q12</span></div>
+    <p class="idea">Pre-training: predict every next token of unlabelled text with a causal mask, all parameters starting random. Fine-tuning: start from those weights, wrap the input in special tokens, and train a small head on labelled data.</p>
+    <div class="mathcard"><p class="k">The math</p>
+      <div class="m d">\mathcal{L}_{CLM}(\theta)=-\sum_{i=1}^{T-1}\log P_\theta\big(x_{i+1}\mid x_1,\dots,x_i\big)\qquad(\text{every position, one masked pass, no labels})</div>
+      <div class="m d">\text{fine-tune: }\ \hat y=\operatorname{softmax}\!\big(W_y\,h^{(L)}_{\langle e\rangle}\big),\qquad \mathcal{L}=-\log \hat y_{\,\text{label}}\qquad(\text{labelled data})</div>
+      <div class="m d">\#\text{params}_{\text{GPT-1}}=\underbrace{|V|\,d}_{\text{tokens}}+\underbrace{T\,d}_{\text{positions}}+N\big(\underbrace{4d^2}_{\text{attention}}+\underbrace{2d\,d_{ff}+d_{ff}+d}_{\text{FFN}}\big)</div>
+      <ul class="gloss">
+        <li>GPT is the transformer <b>decoder without cross-attention</b>: masked self-attention, FFN, LayerNorm and residuals, stacked <span class="m">N=12</span> times with <span class="m">d=768</span> and 12 heads.</li>
+        <li>Pre-training starts from random weights. Fine-tuning starts from the pre-trained weights and adds only <span class="m">W_y</span>.</li>
+        <li>The output layer reuses the token-embedding matrix (tied weights), so it adds no parameters. A rare word missing from a batch can still be updated through the softmax.</li>
+      </ul>
+    </div>
+    <p class="k">Try it</p>
+    <div id="b13"></div>
+    <p class="trap"><b>Exam trap.</b> Right-to-left languages need <b>no</b> mask flip: the model only sees a sequence (GA3 Q2). Shapes in GA3 Q5: PE is <span class="m">T\times d</span>, one <span class="m">W_Q^{i}</span> is <span class="m">d\times d/h</span>, and the mask is <span class="m">T\times T</span>.</p>
+    <p class="ext"><b>See also</b> <a href="https://bbycroft.net/llm" target="_blank" rel="noopener">LLM Visualization (3-D walk through a GPT)</a> <a href="https://jalammar.github.io/illustrated-gpt2/" target="_blank" rel="noopener">The Illustrated GPT-2</a></p>
+  </section>
+
+  <!-- LAB 14 -->
+  <section class="lab" id="lab14" data-week="BERT">
+    <div class="lab-head"><span class="lab-no">Lab 14</span><h2>BERT masked language modelling: 15% and 80/10/10</h2></div>
+    <div class="meta"><span class="chip">L21</span><span class="chip">Note 05 §2–5, WE1–WE2</span><span class="chip">Assignments: GA4 Q2 · past papers <b>J</b>: 2025T2-Q3</span></div>
+    <p class="idea">BERT picks 15% of positions. Of those, 80% become [MASK], 10% become a random word and 10% stay unchanged, so the model can't rely on seeing [MASK]. The loss is computed only at the picked positions, all of them.</p>
+    <div class="mathcard"><p class="k">The math</p>
+      <div class="m d">\mathcal{L}_{MLM}=-\frac{1}{|\mathcal{M}|}\sum_{i\in\mathcal{M}}\log P_\theta\big(x_i\mid\tilde x\big),\qquad \mathcal{M}=\text{the picked }15\%\text{ of positions}</div>
+      <div class="m d">\Pr[\texttt{[MASK]}]=0.15\times0.8=0.12,\qquad \Pr[\text{random word}]=\Pr[\text{unchanged}]=0.15\times0.1=0.015</div>
+      <ul class="gloss">
+        <li><span class="m">\tilde x</span> is the corrupted input. The model sees both sides of position <span class="m">i</span> and must rebuild the original word.</li>
+        <li>Random and unchanged positions are still in <span class="m">\mathcal{M}</span>, so the model can't learn "only [MASK] needs fixing", and [MASK] never appears at fine-tuning time anyway.</li>
+        <li>Unpicked positions contribute nothing to the loss, which is why BERT learns from only 15% of tokens per pass.</li>
+      </ul>
+    </div>
+    <p class="k">Try it</p>
+    <div id="b14"></div>
+    <p class="trap"><b>Exam trap.</b> The loss uses the picked positions only. Check whether the question wants the mean (1.72) or the sum (3.44): GA4 Q2 accepted both. Use the natural log.</p>
+    <p class="ext"><b>See also</b> <a href="https://jalammar.github.io/illustrated-bert/" target="_blank" rel="noopener">The Illustrated BERT</a></p>
+  </section>
+
+  <!-- LAB 15 -->
+  <section class="lab" id="lab15" data-week="BERT">
+    <div class="lab-head"><span class="lab-no">Lab 15</span><h2>BERT input, NSP, fine-tuning and QA</h2></div>
+    <div class="meta"><span class="chip">L23 · L24 · L25</span><span class="chip">Note 05 §6–12</span><span class="chip">Past papers <b>J</b>: 2025T2-Q8 · 2026T1-Q5, Q7 · GA4 Q3</span></div>
+    <p class="idea">Each input vector is the sum of three learned embeddings: token, segment (A or B) and position. The final [CLS] vector drives next-sentence prediction and sentence classification; every token's vector drives tagging; question answering learns a start vector and an end vector.</p>
+    <div class="mathcard"><p class="k">The math</p>
+      <div class="m d">x_t=E_{\text{tok}}(w_t)+E_{\text{seg}}(A\text{ or }B)+E_{\text{pos}}(t),\qquad x_t\in\mathbb{R}^{768}</div>
+      <div class="m d">\text{NSP / classification: }\ \hat y=\operatorname{softmax}\!\big(W\,h_{[\text{CLS}]}\big)</div>
+      <div class="m d">s_i=\frac{e^{S\cdot h_i}}{\sum_{j}e^{S\cdot h_j}},\qquad e_i=\frac{e^{E\cdot h_i}}{\sum_{j}e^{E\cdot h_j}},\qquad \text{answer}=\Big[\arg\max_i s_i,\ \arg\max_j e_j\Big]\ \text{if } j\ge i,\ \text{else the empty string}</div>
+      <div class="m d">\#\text{params}_{\text{BERT-base}}=\big(|V|+2+512\big)\,d+N\big(4d^2+2d\,d_{ff}+d_{ff}+d\big)</div>
+      <ul class="gloss">
+        <li>All three embeddings are learned tables. The segment table has 2 rows (<span class="m">E_A, E_B</span>) and the position table 512.</li>
+        <li><span class="m">S, E\in\mathbb{R}^{768}</span> are the only new QA parameters. The softmaxes run over paragraph positions only.</li>
+        <li>Fine-tuning trains all of BERT plus the small head. Feature extraction freezes BERT and trains only the head.</li>
+      </ul>
+    </div>
+    <p class="k">Try it</p>
+    <div id="b15"></div>
+    <p class="trap"><b>Exam trap.</b> The segment embedding is never switched off: a single sentence uses <span class="m">E_A</span> everywhere (2026T1-Q5). Classification uses the <b>[CLS]</b> vector (2026T1-Q7, GA4 Q3).</p>
+    <p class="ext"><b>See also</b> <a href="https://jalammar.github.io/illustrated-bert/" target="_blank" rel="noopener">The Illustrated BERT</a> <a href="https://github.com/jessevig/bertviz" target="_blank" rel="noopener">BertViz (inspect BERT's attention heads)</a></p>
+  </section>
+
+  <!-- LAB 16 -->
+  <section class="lab" id="lab16" data-week="BERT">
+    <div class="lab-head"><span class="lab-no">Lab 16</span><h2>BERT vs GPT at a glance</h2></div>
+    <div class="meta"><span class="chip">L13 · L21</span><span class="chip">Note 05 §1, §13 · Note 03 §4</span><span class="chip">Past papers <b>J</b>: 2025T2-Q3</span></div>
+    <p class="idea">Same transformer blocks, different mask and objective. BERT's encoder sees both sides of every token and fills in blanks; GPT's decoder sees only the left side and predicts the next token, which is what makes it a generator.</p>
+    <div class="mathcard"><p class="k">The math</p>
+      <div class="m d">\text{BERT: }\ P\big(x_i\mid x_1,\dots,x_{i-1},\,x_{i+1},\dots,x_T\big)\ \ \text{for } i\in\mathcal{M}\qquad\qquad \text{GPT: }\ P\big(x_i\mid x_1,\dots,x_{i-1}\big)\ \ \text{for every } i</div>
+      <ul class="gloss">
+        <li>BERT conditions on both sides, which is great for understanding a sentence but gives no left-to-right way to generate one.</li>
+        <li>GPT conditions on the left only, so sampling one token at a time is natural.</li>
+        <li>Both are stacks of the same block; only the mask, the objective and the special tokens differ.</li>
+      </ul>
+    </div>
+    <p class="k">Try it</p>
+    <div id="b16"></div>
+    <p class="trap"><b>Exam trap.</b> "The main difference between GPT and BERT pre-training" is the objective: CLM (next token) vs MLM + NSP (2025T2-Q3).</p>
+  </section>
+  </main>
+</div>
+<footer>An unofficial study aid for IIT Madras BSDA5004 Large Language Models (lectures L1–L25), not affiliated with or endorsed by IIT Madras. Every preset was checked with a separate calculator against the worked solutions; "Note" chips and past-paper refs (e.g. 2025T2-Q13) point to the author's own study notes and past Quiz 1 papers.</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script>
+"use strict";
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const mm=(A,B)=>A.map(r=>B[0].map((_,j)=>r.reduce((s,v,k)=>s+v*B[k][j],0)));
+const tr=A=>A[0].map((_,j)=>A.map(r=>r[j]));
+const smRow=r=>{const f=r.filter(Number.isFinite);const m=Math.max(...f);const e=r.map(v=>Number.isFinite(v)?Math.exp(v-m):0);const s=e.reduce((a,b)=>a+b,0);return e.map(v=>v/s)};
+const smRows=M=>M.map(smRow), smCols=M=>tr(tr(M).map(smRow));
+const sum=a=>a.reduce((x,y)=>x+y,0);
+function fmt(x,d=3){ if(x===-Infinity) return "−∞"; if(x===Infinity) return "∞"; if(Math.abs(x)<0.5*Math.pow(10,-d)) x=0; return x.toFixed(d).replace("-","−"); }
+function big(n){ if(!Number.isFinite(n)) return "too large"; if(Math.abs(n)>=1e15) return n.toExponential(4).replace("e+"," × 10^"); return Math.round(n).toLocaleString("en-US"); }
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+function heatBg(w){const p=Math.round(Math.max(0,Math.min(1,w))*88);return `background:color-mix(in oklab,var(--accent) ${p}%,var(--surface));color:${w>0.55?"var(--on-accent)":"var(--ink)"}`;}
+function matHTML(M,o={}){
+  const {name="",rows=null,cols=null,heat=false,d=3,rowSum=false,colSum=false,cls=null}=o;
+  let h=`<figure class="mat">${name?`<figcaption>${name}<span class="dim">${M.length}×${M[0].length}</span></figcaption>`:""}<div class="mwrap"><table>`;
+  if(cols){h+="<thead><tr>"+(rows?"<th></th>":"")+cols.map(c=>`<th>${esc(c)}</th>`).join("")+(rowSum?"<th>row Σ</th>":"")+"</tr></thead>";}
+  h+="<tbody>"+M.map((r,i)=>"<tr>"+(rows?`<th>${esc(rows[i])}</th>`:"")+r.map((v,j)=>{
+    const c=cls?cls(i,j,v):""; const st=heat&&Number.isFinite(v)?` style="${heatBg(v)}"`:"";
+    return `<td class="${c}"${st}>${fmt(v,d)}</td>`;}).join("")+(rowSum?`<td class="sum">${fmt(sum(r),3)}</td>`:"")+"</tr>").join("");
+  if(colSum){h+="<tr>"+(rows?"<th>col Σ</th>":"")+tr(M).map(c=>`<td class="sum">${fmt(sum(c),3)}</td>`).join("")+(rowSum?"<td></td>":"")+"</tr>";}
+  return h+"</tbody></table></div></figure>";
+}
+function editMat(host,M,name,onChange,o={}){
+  const {rows=null,cols=null}=o, id=host.id;
+  host.innerHTML=`<figure class="mat"><figcaption>${name}<span class="dim">${M.length}×${M[0].length}</span></figcaption><div class="mwrap"><table>`+
+    (cols?"<thead><tr>"+(rows?"<th></th>":"")+cols.map(c=>`<th>${esc(c)}</th>`).join("")+"</tr></thead>":"")+
+    "<tbody>"+M.map((r,i)=>"<tr>"+(rows?`<th>${esc(rows[i])}</th>`:"")+r.map((v,j)=>`<td class="ed"><input id="${id}-${i}-${j}" data-i="${i}" data-j="${j}" type="text" inputmode="decimal" value="${v}" aria-label="${name} row ${i+1} column ${j+1}"></td>`).join("")+"</tr>").join("")+
+    "</tbody></table></div></figure>";
+  host.querySelectorAll("input").forEach(inp=>inp.addEventListener("input",()=>{
+    const v=parseFloat(inp.value.replace("−","-"));
+    if(Number.isFinite(v)){inp.classList.remove("bad");M[+inp.dataset.i][+inp.dataset.j]=v;onChange();} else inp.classList.add("bad");
+  }));
+}
+function seg(host,opts,cur,onPick){
+  host.innerHTML=opts.map(([v,l])=>`<button type="button" data-v="${v}" class="${v===cur?"on":""}" aria-pressed="${v===cur}">${l}</button>`).join("");
+  host.onclick=e=>{const b=e.target.closest("button");if(!b)return;$$("button",host).forEach(x=>{x.classList.toggle("on",x===b);x.setAttribute("aria-pressed",x===b)});onPick(b.dataset.v);};
+}
+function kv(items){return items.map(([k,v,note,hit])=>`<div class="${hit?"hit":""}"><dt>${k}</dt><dd>${v}${note?`<small>${note}</small>`:""}</dd></div>`).join("");}
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function hexRGB(h){h=h.replace("#","");if(h.length===3)h=h.split("").map(c=>c+c).join("");const n=parseInt(h,16);return[(n>>16)&255,(n>>8)&255,n&255];}
+const mix=(a,b,t)=>a.map((v,i)=>Math.round(v+(b[i]-v)*t));
+const themeHooks=[]; const onTheme=f=>themeHooks.push(f);
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>themeHooks.forEach(f=>f()));
+new MutationObserver(()=>themeHooks.forEach(f=>f())).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
+
+/* ---------- math typesetting (KaTeX; MathML output where its stylesheet can't load) ---------- */
+const R=String.raw;
+const KHTML=!!window.LLMVL_KATEX_HTML;
+/* Browsers' native MathML ignores mathvariant on letters, so map styled letters to their Unicode forms. */
+const DS={C:"ℂ",H:"ℍ",N:"ℕ",P:"ℙ",Q:"ℚ",R:"ℝ",Z:"ℤ"}, SC={B:"ℬ",E:"ℰ",F:"ℱ",H:"ℋ",I:"ℐ",L:"ℒ",M:"ℳ",R:"ℛ"};
+function fixMML(h){ return h
+  .replace(/<mi mathvariant="double-struck">([A-Z])<\/mi>/g,(_,c)=>`<mi mathvariant="normal">${DS[c]||String.fromCodePoint(0x1D538+c.charCodeAt(0)-65)}</mi>`)
+  .replace(/<mi mathvariant="script">([A-Z])<\/mi>/g,(_,c)=>`<mi mathvariant="normal">${SC[c]||String.fromCodePoint(0x1D49C+c.charCodeAt(0)-65)}</mi>`)
+  .replace(/<mtext mathvariant="bold">/g,'<mtext style="font-weight:700">')
+  .replace(/<mtext mathvariant="monospace">/g,'<mtext style="font-family:var(--f-mono)">'); }
+function T(tex,display){ if(window.katex){ try{ const h=katex.renderToString(tex,{displayMode:!!display,output:KHTML?"htmlAndMathml":"mathml",throwOnError:false,strict:"ignore"}); return KHTML?h:fixMML(h); }catch(e){} } return `<code class="texfb">${esc(tex)}</code>`; }
+const TD=tex=>`<div class="eq">${T(tex,true)}</div>`;
+function ft(x,d=3){ if(x===-Infinity) return "-\\infty"; if(x===Infinity) return "\\infty"; if(Math.abs(x)<0.5*Math.pow(10,-d)) x=0; return x.toFixed(d); }
+function bigT(n){ if(!Number.isFinite(n)) return "\\infty"; if(Math.abs(n)>=1e15){ const [m,e]=n.toExponential(4).split("e"); return `${m}\\times10^{${+e}}`; } return Math.round(n).toLocaleString("en-US").replace(/,/g,"{,}"); }
+const sub=(a,b)=>b<0?`${a}-(${b})`:`${a}-${b}`;
+const tx=s=>String(s).replace(/[\\{}$&#%_^~]/g,"");
+const worked=(...lines)=>`<div class="worked"><p class="k">Your numbers, step by step</p>${lines.join("")}</div>`;
+function renderStatic(){ $$(".m").forEach(el=>{ if(el.dataset.done) return; const tex=el.textContent.trim(); el.innerHTML=el.classList.contains("d")?`<div class="eq">${T(tex,true)}</div>`:T(tex,false); el.dataset.done="1"; }); }
+
+/* ---------- LAB 1: self-attention by hand ---------- */
+(function(){
+  const GA1={H:[[0.5,0.25,1],[0.1,0.25,0],[0.1,0.1,0.9]],WQ:[[1,1],[-1,1],[0,1]],WK:[[0,1],[1,0],[0,1]],WV:[[0,0],[-1,-1],[1,1]]};
+  const clone=o=>JSON.parse(JSON.stringify(o));
+  let S=Object.assign(clone(GA1),{scale:false,dir:"row"});
+  const toks=["learning","brings","joy"];
+  const host=$("#b1");
+  host.innerHTML=`<div class="controls"><div class="seg" id="l1-dir" role="group" aria-label="Softmax direction"></div>
+    <label class="f"><input type="checkbox" id="l1-scale"> divide scores by ${T(R`\sqrt{d_k}`)}</label>
+    <label class="f">follow query <select id="l1-q"><option value="0">1 · learning</option><option value="1">2 · brings</option><option value="2">3 · joy</option></select></label></div>
+    <div class="preset"><span>Preset</span><button class="ghost" type="button" id="l1-ga1">GA1 Q3 (no scaling)</button></div>
+    <div class="row"><div id="l1-H"></div><div id="l1-WQ"></div><div id="l1-WK"></div><div id="l1-WV"></div></div>
+    <div class="flow" id="l1-flow"></div><div id="l1-out"></div><div id="l1-work"></div>`;
+  $("#l1-q").addEventListener("change",()=>render());
+  seg($("#l1-dir"),[["row","Softmax across each row (slides)"],["col","Down each column (key slip)"]],"row",v=>{S.dir=v;render();});
+  $("#l1-scale").addEventListener("change",e=>{S.scale=e.target.checked;render();});
+  function build(){
+    editMat($("#l1-H"),S.H,"H (input embeddings)",render,{rows:toks});
+    editMat($("#l1-WQ"),S.WQ,"W_Q",render); editMat($("#l1-WK"),S.WK,"W_K",render); editMat($("#l1-WV"),S.WV,"W_V",render);
+  }
+  $("#l1-ga1").addEventListener("click",()=>{Object.assign(S,clone(GA1),{scale:false});$("#l1-scale").checked=false;build();render();});
+  function render(){
+    const Q=mm(S.H,S.WQ),K=mm(S.H,S.WK),V=mm(S.H,S.WV),dk=K[0].length;
+    let E=mm(Q,tr(K)); const Es=S.scale?E.map(r=>r.map(v=>v/Math.sqrt(dk))):E;
+    const A=S.dir==="row"?smRows(Es):smCols(Es), Z=mm(A,V);
+    $("#l1-flow").innerHTML=`H <b>${S.H.length}×${S.H[0].length}</b> → Q, K, V <b>${Q.length}×${dk}</b> → QKᵀ <b>${E.length}×${E.length}</b>${S.scale?` → ÷√${dk}`:""} → softmax <b>${S.dir==="row"?"per row":"per column"}</b> → A <b>${A.length}×${A.length}</b> → Z = AV <b>${Z.length}×${Z[0].length}</b>`;
+    const best=A.map((r,i)=>{const j=r.indexOf(Math.max(...r));return `<li><span class="mono">z${i+1}</span> (${toks[i]||"token "+(i+1)}) puts the most weight, <b>${fmt(r[j])}</b>, on <b>${toks[j]||"token "+(j+1)}</b></li>`;}).join("");
+    $("#l1-out").innerHTML=`<div class="row">${matHTML(Q,{name:"Q = H·W_Q"})}${matHTML(K,{name:"K = H·W_K"})}${matHTML(V,{name:"V = H·W_V"})}</div>
+      <div class="row" style="margin-top:12px">${matHTML(Es,{name:S.scale?"scores QKᵀ/√d_k":"scores E = QKᵀ",rows:toks.map(t=>"q "+t),cols:toks.map(t=>"k "+t)})}
+      ${matHTML(A,{name:"weights A",heat:true,rows:toks.map(t=>"q "+t),cols:toks.map(t=>"k "+t),rowSum:true,colSum:true})}
+      ${matHTML(Z,{name:"Z = A·V"})}</div>`+
+      (S.dir==="col"?`<div class="warnbox"><b>Columns sum to 1 here, rows don't.</b> That treats each key as the thing being distributed, which is not what the slides do: row <i>i</i> is query <i>i</i>'s attention [MultiHeadAttention p.8]. The official GA1 Q3 solution and the 2025T2-Q13–15 keys used this column version. In an exam MCQ, use rows first; if that answer isn't offered, check this one.</div>`
+      :`<ul class="small" style="margin:10px 0 0;padding-left:18px">${best}</ul>`);
+    const qi=Math.min(+$("#l1-q").value||0,S.H.length-1), I=qi+1, nm=toks[qi]||("token "+I);
+    const terms=Q[qi].map((v,c)=>`(${ft(v,3)})(${ft(K[0][c],3)})`).join("+");
+    const eLine=S.scale?R`e_{${I}1}=\frac{q_{${I}}\cdot k_1}{\sqrt{${dk}}}=\frac{${terms}}{\sqrt{${dk}}}=${ft(Es[qi][0],4)}`:R`e_{${I}1}=q_{${I}}\cdot k_1=${terms}=${ft(Es[qi][0],4)}`;
+    const aLine=S.dir==="row"
+      ?R`\alpha_{${I}1}=\frac{e^{${ft(Es[qi][0],3)}}}{${Es[qi].map(v=>`e^{${ft(v,3)}}`).join("+")}}=${ft(A[qi][0],4)}`
+      :R`\alpha_{${I}1}=\frac{e^{${ft(Es[qi][0],3)}}}{${Es.map(r=>`e^{${ft(r[0],3)}}`).join("+")}}=${ft(A[qi][0],4)}\quad(\text{column version: the sum runs down column }1)`;
+    const vec=v=>R`\begin{bmatrix}${v.map(x=>ft(x,3)).join(" & ")}\end{bmatrix}`;
+    const zLine=R`z_{${I}}=\sum_j\alpha_{${I}j}\,v_j=${A[qi].map((a,j)=>R`${ft(a,3)}\,${vec(V[j])}`).join("+")}=${vec(Z[qi])}`;
+    $("#l1-work").innerHTML=worked(`<p>Follow query ${I} ("${esc(nm)}"): its score against key 1, its weight on key 1, then its output.</p>`,TD(eLine),TD(aLine),TD(zLine));
+  }
+  build(); render();
+})();
+
+/* ---------- LAB 2: counts and causal mask ---------- */
+(function(){
+  const host=$("#b2");
+  host.innerHTML=`<div class="controls"><label class="f">sequence length T <input id="l2-T" type="number" min="1" max="1000000" value="6"></label>
+    <label class="f">heads h <input id="l2-h" type="number" min="1" max="512" value="4"></label>
+    <label class="f">batch B <input id="l2-B" type="number" min="1" max="100000" value="1"></label>
+    <label class="f">bytes per score <select id="l2-by"><option value="4">4 (fp32)</option><option value="2">2 (fp16)</option></select></label></div>
+    <div class="preset" id="l2-pre"><span>Past papers</span>
+      <button class="ghost" type="button" data-p="6,4,1" data-hit="extra">2026T2-Q4 · extra scores, 4→8 heads</button>
+      <button class="ghost" type="button" data-p="128,1,1" data-hit="masked">2026T2-Q6 · masked entries</button>
+      <button class="ghost" type="button" data-p="1024,8,32" data-hit="allowed">2025T3-Q18 · non-zero scores</button>
+      <button class="ghost" type="button" data-p="1024,8,32" data-hit="targets">2025T3-Q17 · CLM targets</button>
+      <button class="ghost" type="button" data-p="12,2,4" data-hit="batch">2025T3-Q14 · all scores</button></div>
+    <div class="row"><div id="l2-grid" style="min-width:0;max-width:100%"></div><dl class="kv" id="l2-kv"></dl></div><div id="l2-work"></div>`;
+  let hit="";
+  const ids=["l2-T","l2-h","l2-B","l2-by"]; ids.forEach(i=>$("#"+i).addEventListener("input",()=>{hit="";render();}));
+  $("#l2-pre").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const [T,h,B]=b.dataset.p.split(",");$("#l2-T").value=T;$("#l2-h").value=h;$("#l2-B").value=B;hit=b.dataset.hit;render();});
+  function render(){
+    const T=Math.max(1,Math.floor(+$("#l2-T").value||1)),h=Math.max(1,Math.floor(+$("#l2-h").value||1)),B=Math.max(1,Math.floor(+$("#l2-B").value||1)),by=+$("#l2-by").value;
+    if(T<=12){
+      const M=[...Array(T)].map((_,i)=>[...Array(T)].map((_,j)=>j<=i?0:-Infinity));
+      $("#l2-grid").innerHTML=matHTML(M,{name:"causal mask M (row = query, column = key)",rows:M.map((_,i)=>"x"+(i+1)),cols:M.map((_,j)=>"x"+(j+1)),d:0,cls:(i,j)=>j<=i?"allowed":"masked"})+
+        `<p class="small">Shaded cells are kept. Diagonal included: every token sees itself.</p>`;
+    } else $("#l2-grid").innerHTML=`<div class="callout" style="max-width:280px">The grid is drawn for T ≤ 12. The counts on the right work for any T.</div>`;
+    const MB=v=>`${(v/1e6).toLocaleString("en-US",{maximumFractionDigits:2})} MB`;
+    $("#l2-kv").innerHTML=kv([
+      ["Scores per head, one sequence",big(T*T),"T²"],
+      ["Masked (−∞) per head",big(T*(T-1)/2),"T(T−1)/2",hit==="masked"],
+      ["Kept (non-zero) per head",big(T*(T+1)/2),"T(T+1)/2",hit==="allowed"],
+      ["All heads, one sequence",big(h*T*T),"h·T²"],
+      ["Whole batch",big(B*h*T*T),"B·h·T²",hit==="batch"],
+      ["Extra scores if h doubles",big(h*T*T),"(2h − h)·T² = h·T²",hit==="extra"],
+      ["CLM next-token targets in the batch",big(B*(T-1)),"B·(T − 1): no target for the last token",hit==="targets"],
+      ["Score memory, one layer",MB(B*h*T*T*by),`B·h·T² × ${by} bytes (linear in h)`]]);
+    $("#l2-work").innerHTML=worked(
+      TD(R`\text{kept}=\frac{T(T+1)}{2}=\frac{${T}\cdot${T+1}}{2}=${bigT(T*(T+1)/2)},\qquad \text{masked}=\frac{T(T-1)}{2}=\frac{${T}\cdot${T-1}}{2}=${bigT(T*(T-1)/2)}`),
+      TD(R`B\cdot h\cdot T^2=${B}\cdot${h}\cdot{${T}}^2=${bigT(B*h*T*T)},\qquad B\,(T-1)=${B}\cdot${T-1}=${bigT(B*(T-1))}`));
+  }
+  render();
+})();
+
+/* ---------- LAB 3: multi-head attention ---------- */
+(function(){
+  const host=$("#b3");
+  host.innerHTML=`<div class="controls"><label class="f">d<sub>model</sub> <input id="l3-d" type="number" min="2" max="16384" value="256"></label>
+    <label class="f">heads h <select id="l3-h"></select></label><label class="f"><input type="checkbox" id="l3-b"> count biases</label></div>
+    <div class="preset" id="l3-pre"><span>Past papers</span>
+      <button class="ghost" type="button" data-p="256,4" data-hit="mha">GA1 Q1c · MHA total</button>
+      <button class="ghost" type="button" data-p="512,8" data-hit="wq">2025T3-Q16 · one W_Q</button>
+      <button class="ghost" type="button" data-p="768,12" data-hit="wo">2025T3-Q19 · W_O</button>
+      <button class="ghost" type="button" data-p="32,4" data-hit="qkv">2025T1-Q10 · Q, K, V without W_O</button></div>
+    <div class="split" id="l3-split" aria-label="d_model split into heads"></div><p class="small" id="l3-splitcap"></p>
+    <div class="flow" id="l3-flow"></div><dl class="kv" id="l3-kv"></dl><div id="l3-work"></div>
+    <div class="callout">Change h and watch the total: it stays at 4·d<sub>model</sub>². More heads means thinner slices, not more parameters.</div>
+    <h3 class="sub">The two-head example from the MultiHeadAttention deck (column convention: X is d<sub>model</sub> × T)</h3>
+    <div class="controls"><div class="seg" id="l3-dir"></div></div><div id="l3-deck"></div>`;
+  let hit="";
+  function fillH(keep){const d=+$("#l3-d").value||2;const opts=[1,2,3,4,6,8,12,16,32,64].filter(h=>d%h===0&&h<=d);$("#l3-h").innerHTML=opts.map(h=>`<option value="${h}">${h}</option>`).join("");if(keep&&opts.includes(+keep))$("#l3-h").value=keep;}
+  $("#l3-d").addEventListener("input",()=>{hit="";fillH($("#l3-h").value);render();});
+  $("#l3-h").addEventListener("change",()=>{hit="";render();}); $("#l3-b").addEventListener("change",render);
+  $("#l3-pre").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const [d,h]=b.dataset.p.split(",");$("#l3-d").value=d;fillH(h);$("#l3-h").value=h;hit=b.dataset.hit;render();});
+  function render(){
+    const d=Math.max(2,+$("#l3-d").value||2),h=+$("#l3-h").value||1,dk=d/h,bias=$("#l3-b").checked;
+    const shown=Math.min(h,16);
+    $("#l3-split").innerHTML=[...Array(shown)].map((_,i)=>`<div style="flex:1;background:color-mix(in oklab,var(--accent) ${100-i*(50/Math.max(1,shown-1))}%,var(--neg))">${shown<=8?`head ${i+1}`:i+1}</div>`).join("");
+    $("#l3-splitcap").textContent=`d_model = ${d} split into ${h} heads of d_k = d_v = ${dk} each.`;
+    $("#l3-flow").innerHTML=`X <b>T×${d}</b> → per head: W_Q<sup>i</sup> <b>${d}×${dk}</b> → Q<sub>i</sub> <b>T×${dk}</b> → scores <b>T×T</b> → head<sub>i</sub> <b>T×${dk}</b> → concat <b>T×${h*dk}</b> → W_O <b>${h*dk}×${d}</b> → output <b>T×${d}</b>`;
+    const wq=d*dk, qkv1=3*d*dk, qkv=3*h*d*dk, wo=h*dk*d, b=bias?(3*h*dk+d):0;
+    $("#l3-kv").innerHTML=kv([
+      ["One W_Q (one head)",big(wq),"d_model · d_k",hit==="wq"],
+      ["Q + K + V of one head",big(qkv1),"3 · d_model · d_k"],
+      ["Q, K, V for all heads",big(qkv),"3h · d_model · d_k = 3·d_model²",hit==="qkv"],
+      ["W_O",big(wo),"(h·d_v) · d_model = d_model²",hit==="wo"],
+      ["Whole MHA sub-layer",big(qkv+wo+b),bias?`4·d_model² + ${3*h*dk+d} biases`:"4·d_model² (no biases, as the course counts)",hit==="mha"]]);
+    $("#l3-work").innerHTML=worked(
+      TD(R`d_k=\frac{d_{model}}{h}=\frac{${d}}{${h}}=${dk},\qquad W_Q^{i}\in\mathbb{R}^{${d}\times${dk}}\ \Rightarrow\ ${d}\cdot${dk}=${bigT(wq)}\text{ parameters}`),
+      TD(R`\underbrace{${h}\cdot3\cdot${d}\cdot${dk}}_{W_Q,\,W_K,\,W_V}+\underbrace{${h}\cdot${dk}\cdot${d}}_{W_O}${bias?R`+\underbrace{${3*h*dk+d}}_{\text{biases}}`:""}=${bigT(qkv+wo+b)}${bias?"":R`=4\cdot{${d}}^2`}`));
+  }
+  fillH("4"); $("#l3-h").value="4"; render();
+  // deck example
+  const X=[[1,0],[0,2],[1,0],[0,2]], W1=[[1,1,1,1],[2,2,2,2]], W2=[[1,0,1,0],[1,1,2,1]], WO=[[0.5,0,0,0],[0,0.5,0,0],[0,0,1,0],[0,0,0,1]];
+  let dir="row";
+  seg($("#l3-dir"),[["row","Softmax across rows (deck)"],["col","Down columns (2025T2 key)"]],"row",v=>{dir=v;deck();});
+  function head(W){const Q=mm(W,X);const S=mm(tr(Q),Q).map(r=>r.map(v=>v/Math.SQRT2));const A=dir==="row"?smRows(S):smCols(S);return {Q,S,A,H:mm(A,tr(Q))};}
+  function deck(){
+    const h1=head(W1),h2=head(W2); const Z=h1.H.map((r,i)=>r.concat(h2.H[i])); const out=mm(WO,tr(Z));
+    $("#l3-deck").innerHTML=TD(R`X\in\mathbb{R}^{d_{model}\times T},\quad Q=W_Q X,\quad \text{head}=\operatorname{softmax}\!\left(\frac{Q^{\top}K}{\sqrt{d_k}}\right)V^{\top}\in\mathbb{R}^{T\times d_v},\quad \operatorname{MHA}=W_O\,Z^{\top},\ \ Z=[\text{head}_1\,|\,\text{head}_2]`)+`<div class="row">${matHTML(X,{name:"X",d:0})}${matHTML(h1.Q,{name:"head 1: Q=K=V = W¹X",d:0})}${matHTML(h1.S,{name:"QᵀK/√2",d:2})}${matHTML(h1.A,{name:"weights",heat:true,d:2})}${matHTML(h1.H,{name:"head 1 = A·Vᵀ",d:2})}</div>
+      <div class="row" style="margin-top:12px">${matHTML(h2.Q,{name:"head 2: Q=K=V = W²X",d:0})}${matHTML(h2.S,{name:"QᵀK/√2",d:2})}${matHTML(h2.A,{name:"weights",heat:true,d:2})}${matHTML(h2.H,{name:"head 2",d:2})}${matHTML(out,{name:"MHA = W_O·Zᵀ, Z = [head1 | head2]",d:2})}</div>`+
+      (dir==="row"?`<p class="small">These are the deck's own results [MultiHeadAttention p.9–12]: head 1 = [[4, 8], [4, 8]], head 2 = [[1.34, 3.33], [0.11, 3.94]].</p>`
+      :`<div class="warnbox">With columns, head 1 becomes [[0, 0], [6, 12]] and head 2 [[1.34, 2.23], [0.66, 4.77]]: exactly the keyed options (b) and (a) of 2025T2-Q13 and Q14, although the deck itself works row-wise.</div>`);
+  }
+  deck();
+})();
+
+/* ---------- LAB 4: BatchNorm vs LayerNorm ---------- */
+(function(){
+  const P={ex4b:{X:[[2,4,6],[1,5,9]],cols:true,label:"Note 02 Example 4b"},q7:{X:[[1,2],[3,4]],cols:false,label:"2025T3-Q7"},t1:{X:[[1,2,3,8],[4,7,11,14]],cols:true,label:"2025T1 passage P2"}};
+  let S={X:P.ex4b.X.map(r=>r.slice()),cols:true,kind:"BN",ddof:0,pre:"ex4b"};
+  const host=$("#b4");
+  host.innerHTML=`<div class="controls"><div class="seg" id="l4-kind"></div><div class="seg" id="l4-or"></div><div class="seg" id="l4-dd"></div></div>
+    <div class="preset" id="l4-pre"><span>Preset</span><button class="ghost" type="button" data-p="ex4b">Note 02 Example 4b</button><button class="ghost" type="button" data-p="q7">2025T3-Q7 (rows are samples)</button><button class="ghost" type="button" data-p="t1">2025T1-Q12–15 (key swapped)</button></div>
+    <div class="row"><div id="l4-X"></div><div id="l4-view"></div></div><div id="l4-out"></div><div id="l4-work"></div>`;
+  seg($("#l4-kind"),[["BN","BatchNorm"],["LN","LayerNorm"]],"BN",v=>{S.kind=v;render();});
+  const orSeg=()=>seg($("#l4-or"),[["c","Each column is a sample"],["r","Each row is a sample"]],S.cols?"c":"r",v=>{S.cols=v==="c";render();});
+  seg($("#l4-dd"),[["0","σ with 1/m (course)"],["1","1/(m−1)"]],"0",v=>{S.ddof=+v;render();});
+  function load(k){S.X=P[k].X.map(r=>r.slice());S.cols=P[k].cols;S.pre=k;orSeg();editMat($("#l4-X"),S.X,"X (editable)",render);render();}
+  $("#l4-pre").addEventListener("click",e=>{const b=e.target.closest("button");if(b)load(b.dataset.p);});
+  function render(){
+    const X=S.X, byRow=(S.kind==="BN")===S.cols; // BN groups features; LN groups samples
+    const groups=byRow?X:tr(X), n=groups[0].length;
+    const st=groups.map(g=>{const mu=sum(g)/n;const v=sum(g.map(x=>(x-mu)**2))/(n-S.ddof);return {mu,s:Math.sqrt(v)};});
+    const Fg=groups.map((g,k)=>g.map(x=>st[k].s===0?0:(x-st[k].mu)/st[k].s));
+    const F=byRow?Fg:tr(Fg);
+    const what=S.kind==="BN"?"feature":"sample", axisName=byRow?"row":"column";
+    const cls=(i,j)=>"g"+((byRow?i:j)%2);
+    $("#l4-view").innerHTML=matHTML(X,{name:`groups: one per ${what} = each ${axisName}`,d:2,cls});
+    const rowsTbl=st.map((s,k)=>`<tr><td>${what} ${k+1} (${axisName} ${k+1})</td><td>[${groups[k].map(v=>fmt(v,2)).join(", ")}]</td><td>${fmt(s.mu,4)}</td><td>${fmt(s.s,4)}</td><td>${fmt(sum(Fg[k]),4)}</td></tr>`).join("");
+    const nFeat=S.cols?X.length:X[0].length;
+    let extra="";
+    if(S.pre==="t1") extra=`<div class="warnbox">The official 2025T1 key gives Q14 (BatchNorm) = 11 and Q15 (LayerNorm) = 6.5: the two are swapped. Toggle BatchNorm/LayerNorm and you'll see BN Σσ = 6.50 and LN Σσ = 11.00 with "each column is a sample".</div>`;
+    if(S.ddof===1) extra+=`<div class="warnbox">1/(m−1) is the sample (unbiased) estimate. The course uses 1/m [Week 2 LLM p.23, p.26]; 2025T3-Q7's trap option (b) is built from 1/(m−1).</div>`;
+    $("#l4-out").innerHTML=`<div class="mwrap" style="margin-top:12px"><table class="plain"><thead><tr><th>group</th><th>values</th><th>μ</th><th>σ</th><th>Σ of normalised</th></tr></thead><tbody>${rowsTbl}</tbody></table></div>
+      <dl class="kv">${kv([["Σσ ("+st.length+" σ's, one per "+what+")",fmt(sum(st.map(s=>s.s)),4),"","1"],["Each normalised group sums to",fmt(sum(Fg[0]),4),"always 0: an easy past-paper mark"],["LayerNorm parameters γ, β",String(2*nFeat),"2 × number of features"]])}</dl>
+      <div class="row">${matHTML(F,{name:`F = ${S.kind} (γ = 1, β = 0)`,d:4,cls,rowSum:byRow,colSum:!byRow})}</div>${extra}`;
+    const g0=groups[0], s0=st[0], v0=sum(g0.map(x=>(x-s0.mu)**2))/(n-S.ddof), dv=S.ddof?`${n}-1`:`${n}`;
+    $("#l4-work").innerHTML=worked(`<p>The first group: ${what} 1 (${axisName} 1).</p>`,
+      TD(R`\mu=\frac{${g0.map(x=>ft(x,2)).join("+")}}{${n}}=${ft(s0.mu,4)}`),
+      TD(R`\sigma^2=\frac{${g0.map(x=>R`(${sub(ft(x,2),ft(s0.mu,3))})^2`).join("+")}}{${dv}}=${ft(v0,4)},\qquad \sigma=\sqrt{${ft(v0,4)}}=${ft(s0.s,4)}`),
+      TD(R`\hat x=\frac{x-\mu}{\sigma}:\ \ ${g0.map(x=>ft(s0.s?(x-s0.mu)/s0.s:0,4)).join(R`,\ `)}\qquad\Rightarrow\qquad \textstyle\sum\hat x=${ft(sum(Fg[0]),4)}`),
+      TD(R`\textstyle\sum\sigma=${st.map(s=>ft(s.s,4)).join("+")}=${ft(sum(st.map(s=>s.s)),4)}`));
+  }
+  orSeg(); editMat($("#l4-X"),S.X,"X (editable)",render); render();
+})();
+
+/* ---------- LAB 5: sinusoidal PE ---------- */
+(function(){
+  const host=$("#b5");
+  host.innerHTML=`<div class="controls"><label class="f">d<sub>model</sub> <select id="l5-d">${[4,6,8,16,32,64,128,512].map(v=>`<option>${v}</option>`).join("")}</select></label>
+    <label class="f">position <input id="l5-pos" type="range" min="0" max="49" value="4"><span class="mono" id="l5-posv">4</span></label>
+    <label class="f">element j <input id="l5-j" type="number" min="0" value="5"></label></div>
+    <div class="controls"><label class="f" style="flex:1 1 320px">word embedding x (optional) <input id="l5-x" type="text" value="0.1, 0, 0.23, 0.4, -0.75, 1" style="flex:1;min-width:0"></label></div>
+    <div class="preset" id="l5-pre"><span>Past papers</span><button class="ghost" type="button" data-p="ga3">GA3 Q1 · Σ(x + PE)</button><button class="ghost" type="button" data-p="t1">2026T1-Q11 · one element</button><button class="ghost" type="button" data-p="t2">2026T2-Q7 · ‖PE‖²</button></div>
+    <div class="row"><div style="flex:1 1 360px;min-width:0"><p class="small" style="margin:0 0 4px">PE matrix: rows = positions 0–49, columns = dimensions (first 64 shown). Blue = +1, orange = −1. The outlined row is your position.</p><canvas id="l5-c" height="240" aria-label="Positional encoding heat map"></canvas></div>
+    <dl class="kv" id="l5-kv"></dl></div><div id="l5-work"></div>
+    <h3 class="sub">Four dimensions across positions</h3><div class="figwrap" id="l5-w"></div>
+    <h3 class="sub">Your position's first values</h3><div class="mwrap" id="l5-t"></div>`;
+  const PE=(pos,j,d)=>{const i=Math.floor(j/2);const a=pos/Math.pow(10000,2*i/d);return j%2===0?Math.sin(a):Math.cos(a);};
+  const ang=(pos,j,d)=>pos/Math.pow(10000,2*Math.floor(j/2)/d);
+  ["l5-d","l5-pos","l5-j","l5-x"].forEach(i=>$("#"+i).addEventListener("input",render));
+  $("#l5-pre").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const p=b.dataset.p;
+    if(p==="ga3"){$("#l5-d").value="6";$("#l5-pos").value=4;$("#l5-j").value=5;$("#l5-x").value="0.1, 0, 0.23, 0.4, -0.75, 1";}
+    if(p==="t1"){$("#l5-d").value="128";$("#l5-pos").value=3;$("#l5-j").value=5;$("#l5-x").value="";}
+    if(p==="t2"){$("#l5-d").value="512";$("#l5-pos").value=3;$("#l5-j").value=0;$("#l5-x").value="";}
+    render();});
+  onTheme(render);
+  function render(){
+    const d=+$("#l5-d").value,pos=+$("#l5-pos").value; let j=Math.max(0,Math.min(d-1,Math.floor(+$("#l5-j").value||0)));
+    $("#l5-posv").textContent=pos;
+    const vec=[...Array(d)].map((_,k)=>PE(pos,k,d));
+    const xs=$("#l5-x").value.split(/[\s,]+/).filter(Boolean).map(s=>parseFloat(s.replace("−","-")));
+    const xok=xs.length===d&&xs.every(Number.isFinite);
+    const i=Math.floor(j/2);
+    $("#l5-kv").innerHTML=kv([
+      [`element j = ${j}: i = ⌊j/2⌋ = ${i}, ${j%2?"cos":"sin"}`,fmt(vec[j],4),`${j%2?"cos":"sin"}(${pos} / 10000^(${2*i}/${d})) = ${j%2?"cos":"sin"}(${fmt(ang(pos,j,d),5)} rad)`],
+      ["Σ PE(pos)",fmt(sum(vec),4)],
+      ["Σ (x + PE)",xok?fmt(sum(xs)+sum(vec),4):"—",xok?`Σx = ${fmt(sum(xs),4)}`:`give ${d} numbers for x`],
+      ["‖PE(pos)‖²",fmt(sum(vec.map(v=>v*v)),4),`= d/2 = ${d/2} for every position`]]);
+    const th=ang(pos,j,d), base=Math.pow(10000,2*i/d);
+    const wl=[TD(R`j=${j}\ \Rightarrow\ i=\lfloor ${j}/2\rfloor=${i},\qquad \theta=\frac{pos}{10000^{2i/d_{model}}}=\frac{${pos}}{10000^{${2*i}/${d}}}=\frac{${pos}}{${ft(base,5)}}=${ft(th,5)}\ \text{rad}`),
+      TD(R`PE_{(${pos},\,${j})}=${j%2?R`\cos`:R`\sin`}(${ft(th,5)})=${ft(vec[j],4)}`)];
+    if(xok) wl.push(TD(R`\sum_j\big(x_j+PE_j\big)=\underbrace{${ft(sum(xs),4)}}_{\sum x}+\underbrace{${ft(sum(vec),4)}}_{\sum PE}=${ft(sum(xs)+sum(vec),4)}`));
+    wl.push(TD(R`\lVert PE_{${pos}}\rVert^2=\sum_{k}PE_k^2=${ft(sum(vec.map(v=>v*v)),4)}=\frac{${d}}{2}`));
+    $("#l5-work").innerHTML=worked(...wl);
+    // heat map
+    const cv=$("#l5-c"), w=Math.min(cv.parentElement.clientWidth||600,720), dpr=window.devicePixelRatio||1, D=Math.min(d,64), P=50, H=240;
+    cv.style.width=w+"px"; cv.style.height=H+"px"; cv.width=Math.round(w*dpr); cv.height=Math.round(H*dpr);
+    const g=cv.getContext("2d"); g.setTransform(dpr,0,0,dpr,0,0);
+    const A=hexRGB(css("--accent")),N=hexRGB(css("--neg")),Sf=hexRGB(css("--surface")),I=css("--ink");
+    const cw=w/D,ch=H/P;
+    for(let p=0;p<P;p++)for(let k=0;k<D;k++){const v=PE(p,k,d);const c=v>=0?mix(Sf,A,v):mix(Sf,N,-v);g.fillStyle=`rgb(${c})`;g.fillRect(k*cw,p*ch,Math.ceil(cw),Math.ceil(ch));}
+    g.strokeStyle=I;g.lineWidth=1.5;g.strokeRect(0.75,pos*ch+0.75,w-1.5,ch-0.5);
+    if(j<D){g.strokeRect(j*cw+0.75,0.75,cw-1.5,H-1.5);}
+    // waves
+    const dims=[0,2,4,2*Math.floor(d/4)].filter((v,k,a)=>v<d&&a.indexOf(v)===k);
+    const W=640,Hh=190,L=36,PR=12,T0=12,B0=26, X=p=>L+(W-L-PR)*p/49, Y=v=>T0+(Hh-T0-B0)*(1-v)/2;
+    const cols=["var(--accent)","var(--neg)","var(--ok)","var(--muted)"];
+    let svg=`<svg viewBox="0 0 ${W} ${Hh}" width="${W}" height="${Hh}" role="img" aria-label="PE values of four dimensions across positions">`;
+    [-1,0,1].forEach(v=>{svg+=`<line x1="${L}" x2="${W-PR}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="${L-6}" y="${Y(v)+4}" font-size="10" text-anchor="end" fill="var(--muted)">${v}</text>`;});
+    [0,10,20,30,40,49].forEach(p=>{svg+=`<text x="${X(p)}" y="${Hh-8}" font-size="10" text-anchor="middle" fill="var(--muted)">${p}</text>`;});
+    dims.forEach((k,n)=>{let pts=[];for(let p=0;p<=49;p+=0.25)pts.push(`${X(p).toFixed(1)},${Y(PE(p,k,d)).toFixed(1)}`);svg+=`<polyline fill="none" stroke="${cols[n]}" stroke-width="1.8" points="${pts.join(" ")}"/>`;});
+    svg+=`<line x1="${X(pos)}" x2="${X(pos)}" y1="${T0}" y2="${Hh-B0}" stroke="var(--ink)" stroke-dasharray="3 3"/>`;
+    svg+="</svg>";
+    $("#l5-w").innerHTML=svg+`<p class="small">${dims.map((k,n)=>`<span style="color:${cols[n]}">■</span> dim ${k} (i = ${k/2}, sin)`).join(" · ")} · dashed line = position ${pos}</p>`;
+    const shown=Math.min(d,10);
+    $("#l5-t").innerHTML=`<table class="plain"><thead><tr><th>j</th><th>i = ⌊j/2⌋</th><th>function</th><th>angle (rad)</th><th>PE</th>${xok?"<th>x</th><th>x + PE</th>":""}</tr></thead><tbody>${[...Array(shown)].map((_,k)=>`<tr${k===j?' style="background:var(--chip)"':""}><td>${k}</td><td>${Math.floor(k/2)}</td><td>${k%2?"cos":"sin"}</td><td>${fmt(ang(pos,k,d),5)}</td><td>${fmt(vec[k],4)}</td>${xok?`<td>${fmt(xs[k],2)}</td><td>${fmt(xs[k]+vec[k],4)}</td>`:""}</tr>`).join("")}</tbody></table>${d>shown?`<p class="small">Showing ${shown} of ${d} dimensions.</p>`:""}`;
+  }
+  window.addEventListener("resize",()=>render());
+  render();
+})();
+
+/* ---------- LAB 6: decoding explorer ---------- */
+(function(){
+  const V=["A","B","C"];
+  const TREE={"":[.5,.4,.1],A:[.2,.35,.45],B:[.85,.1,.05],C:[.4,.3,.3],AA:[.5,.3,.2],AB:[.3,.3,.4],AC:[.6,.2,.2],BA:[.7,.2,.1],BB:[.4,.4,.2],BC:[.3,.3,.4],CA:[.5,.25,.25],CB:[.2,.6,.2],CC:[.34,.33,.33]};
+  const P=s=>{let p=1;for(let i=0;i<s.length;i++)p*=TREE[s.slice(0,i)][V.indexOf(s[i])];return p;};
+  const host=$("#b6");
+  host.innerHTML=`<div class="controls"><div class="seg" id="l6-mode"></div>
+    <label class="f">beam width k <input id="l6-k" type="range" min="1" max="3" value="2"><span class="mono" id="l6-kv">2</span></label>
+    <label class="f">show up to step <input id="l6-t" type="range" min="1" max="3" value="3"><span class="mono" id="l6-tv">3</span></label></div>
+    <div class="row"><div class="figwrap" id="l6-svg" style="flex:1 1 520px;min-width:0"></div><div style="flex:1 1 260px;min-width:0"><div id="l6-steps"></div><dl class="kv" id="l6-res"></dl></div></div><div id="l6-work"></div>
+    <h3 class="sub">Counting calculator</h3>
+    <div class="controls"><label class="f">|V| <input id="c6-V" type="number" min="1" value="7"></label><label class="f">length L <input id="c6-L" type="number" min="1" value="4"></label><label class="f">beam k <input id="c6-k" type="number" min="1" value="3"></label><label class="f">step t <input id="c6-t" type="number" min="1" value="3"></label></div>
+    <div class="preset" id="c6-pre"><span>Past papers</span><button class="ghost" type="button" data-p="7,4,3,4" data-hit="runs">2026T2-Q14 · total runs</button><button class="ghost" type="button" data-p="6,5,3,4" data-hit="step">2025T2-Q19 · runs at t = 4</button><button class="ghost" type="button" data-p="6,5,3,4" data-hit="exact">2025T2-Q20 · sequences</button><button class="ghost" type="button" data-p="10,3,3,3" data-hit="kept">2025T3-Q9 · paths kept</button></div>
+    <dl class="kv" id="c6-kv"></dl><div id="c6-work"></div>`;
+  let mode="beam";
+  seg($("#l6-mode"),[["greedy","Greedy"],["beam","Beam"],["exh","Exhaustive"]],"beam",v=>{mode=v;render();});
+  ["l6-k","l6-t"].forEach(i=>$("#"+i).addEventListener("input",render));
+  function kept(){ // per step s=1..3: array of prefixes kept
+    const k=+$("#l6-k").value, out=[]; let beams=[""];
+    for(let s=1;s<=3;s++){
+      const cand=beams.flatMap(b=>V.map(t=>b+t));
+      let keep;
+      if(mode==="exh") keep=cand;
+      else { const kk=mode==="greedy"?1:k; keep=cand.slice().sort((a,b)=>P(b)-P(a)).slice(0,kk); }
+      out.push({cand,keep}); beams=keep;
+    }
+    return out;
+  }
+  function render(){
+    $("#l6-kv").textContent=$("#l6-k").value; $("#l6-tv").textContent=$("#l6-t").value;
+    $("#l6-k").disabled=mode!=="beam";
+    const t=+$("#l6-t").value, K=kept();
+    const leaves=[];V.forEach(a=>V.forEach(b=>V.forEach(c=>leaves.push(a+b+c))));
+    const y={}; leaves.forEach((s,i)=>y[s]=20+i*21);
+    const avg=s=>{const ch=V.map(c=>s+c);return sum(ch.map(c=>y[c]))/3;};
+    V.forEach(a=>V.forEach(b=>y[a+b]=avg(a+b))); V.forEach(a=>y[a]=avg(a)); y[""]=avg("");
+    const X=[16,130,262,394], keepSet=new Set(K.slice(0,t).flatMap(s=>s.keep));
+    const finalBest=K[t-1].keep.slice().sort((a,b)=>P(b)-P(a))[0];
+    const onBest=s=>finalBest.startsWith(s);
+    let svg=`<svg viewBox="0 0 560 590" width="560" height="590" role="img" aria-label="Decoding tree">`;
+    const nodes=[""].concat(V, V.flatMap(a=>V.map(b=>a+b)), leaves);
+    nodes.forEach(s=>{ if(!s) return; const par=s.slice(0,-1), lv=s.length;
+      const st=lv>t?"fut":keepSet.has(s)?"keep":"drop";
+      const col=st==="keep"?(onBest(s)?"var(--accent)":"var(--ink)"):"var(--line)";
+      svg+=`<line x1="${X[lv-1]}" y1="${y[par]}" x2="${X[lv]}" y2="${y[s]}" stroke="${col}" stroke-width="${st==="keep"&&onBest(s)?2.6:1.2}" opacity="${st==="fut"?0.35:1}"/>`;});
+    nodes.forEach(s=>{const lv=s.length, st=!s?"keep":lv>t?"fut":keepSet.has(s)?"keep":"drop";
+      const fill=st==="keep"?(s&&onBest(s)?"var(--accent)":"var(--ink)"):"var(--surface)";
+      svg+=`<circle cx="${X[lv]}" cy="${y[s]}" r="4.5" fill="${fill}" stroke="${st==="fut"?"var(--line)":"var(--muted)"}" opacity="${st==="fut"?0.4:1}"/>`;
+      if(s){const txt=lv===3?`${s} ${fmt(P(s),3)}`:`${s[s.length-1]} ${fmt(P(s),2)}`; svg+=`<text x="${X[lv]+8}" y="${y[s]+3.5}" font-size="${lv===3?10:11}" fill="${st==="keep"?"var(--ink)":"var(--muted)"}" opacity="${st==="fut"?0.45:1}">${txt}</text>`;}
+      else svg+=`<text x="${X[0]+8}" y="${y[""]-8}" font-size="11" fill="var(--muted)">start</text>`;});
+    svg+="</svg>";
+    $("#l6-svg").innerHTML=svg;
+    $("#l6-steps").innerHTML=`<table class="plain"><thead><tr><th>step</th><th>scored</th><th>kept (joint P)</th></tr></thead><tbody>${K.slice(0,t).map((s,i)=>`<tr><td>${i+1}</td><td>${s.cand.length}</td><td style="white-space:normal;text-align:left">${s.keep.length>6?s.keep.length+" (all)":s.keep.map(p=>`${p} ${fmt(P(p),3)}`).join(", ")}</td></tr>`).join("")}</tbody></table>`;
+    const runs={greedy:3,beam:1+Math.min(+$("#l6-k").value,3)+Math.min(+$("#l6-k").value,9),exh:13}[mode];
+    $("#l6-res").innerHTML=kv([
+      [`Best kept sequence after step ${t}`,`${finalBest} · ${fmt(P(finalBest),3)}`],
+      ["Greedy picks","ACA · 0.135","A (0.5) looks best at step 1"],
+      ["True best (exhaustive)","BAA · 0.238","B (0.4) then A (0.85)"],
+      ["Decoder runs for 3 steps",String(runs),mode==="exh"?"1 + 3 + 9 = Σ|V|^(t−1)":"one run per kept prefix per step"]]);
+    const prodT=s=>s.split("").map((c,i)=>ft(TREE[s.slice(0,i)][V.indexOf(c)],2)).join(R`\times`);
+    $("#l6-work").innerHTML=worked(
+      TD(R`P(\text{ACA})=${prodT("ACA")}=${ft(P("ACA"),3)}\qquad\qquad P(\text{BAA})=${prodT("BAA")}=${ft(P("BAA"),3)}`),
+      `<p>Greedy takes A at step 1 because ${T("0.5>0.4")}, and from then on it can never reach BAA. A beam of ${T("k\\ge2")} keeps B alive long enough to find it.</p>`,
+      TD(R`\text{decoder runs (exhaustive)}=\sum_{t=1}^{3}3^{t-1}=1+3+9=13`));
+    calc();
+  }
+  ["c6-V","c6-L","c6-k","c6-t"].forEach(i=>$("#"+i).addEventListener("input",()=>{chit="";calc();}));
+  let chit="";
+  $("#c6-pre").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const [v,l,k,t]=b.dataset.p.split(",");$("#c6-V").value=v;$("#c6-L").value=l;$("#c6-k").value=k;$("#c6-t").value=t;chit=b.dataset.hit;calc();});
+  function calc(){
+    const v=Math.max(1,+$("#c6-V").value||1),L=Math.max(1,+$("#c6-L").value||1),k=Math.max(1,+$("#c6-k").value||1),t=Math.max(1,+$("#c6-t").value||1);
+    let upto=0,runs=0;for(let s=1;s<=L;s++){upto+=Math.pow(v,s);runs+=Math.pow(v,s-1);}
+    $("#c6-kv").innerHTML=kv([
+      ["Sequences of length exactly L",big(Math.pow(v,L)),"|V|^L",chit==="exact"],
+      ["Sequences of length 1…L",big(upto),"Σ |V|^t"],
+      [`Exhaustive decoder runs at step t = ${t}`,big(Math.pow(v,t-1)),"|V|^(t−1): one per prefix",chit==="step"],
+      [`Total exhaustive runs for L = ${L}`,big(runs),"Σ_{t=1..L} |V|^(t−1)",chit==="runs"],
+      [`Paths kept at step ${t}: greedy / beam / exhaustive`,`1 / ${big(Math.min(k,Math.pow(v,t)))} / ${big(Math.pow(v,t))}`,"1 · k · |V|^t",chit==="kept"]]);
+    const terms=[...Array(Math.min(L,5))].map((_,s)=>`{${v}}^{${s}}`).join("+")+(L>5?R`+\cdots+{${v}}^{${L-1}}`:"");
+    $("#c6-work").innerHTML=worked(
+      TD(R`|V|^{L}={${v}}^{${L}}=${bigT(Math.pow(v,L))},\qquad \text{runs at step }${t}=|V|^{t-1}={${v}}^{${t-1}}=${bigT(Math.pow(v,t-1))}`),
+      TD(R`\text{total runs}=\sum_{t=1}^{${L}}{${v}}^{t-1}=${terms}${v>1?R`=\frac{{${v}}^{${L}}-1}{${v}-1}`:""}=${bigT(runs)}`));
+  }
+  render();
+})();
+
+/* ---------- LAB 7: sampling ---------- */
+(function(){
+  const vocab=["[start]","building","character","a","is","astronomy","science","experience","natural","[end]"];
+  const p0=[0.05,0.02,0.14,0.07,0.09,0.41,0.08,0.05,0.08,0.01];
+  const host=$("#b7");
+  host.innerHTML=`<div class="controls"><div class="seg" id="l7-mode"></div>
+    <label class="f">k <input id="l7-k" type="range" min="1" max="10" value="3"><span class="mono" id="l7-kv">3</span></label>
+    <label class="f">p <input id="l7-p" type="range" min="0.05" max="1" step="0.05" value="0.6"><span class="mono" id="l7-pv">0.60</span></label>
+    <label class="f">temperature T <input id="l7-T" type="range" min="0.1" max="3" step="0.1" value="1"><span class="mono" id="l7-Tv">1.0</span></label></div>
+    <div class="preset" id="l7-pre"><span>Preset</span><button class="ghost" type="button" data-p="k3">GA4 Q1d · top-k, k = 3</button><button class="ghost" type="button" data-p="g">k = 1 is greedy</button><button class="ghost" type="button" data-p="hot">T = 2 flattens</button></div>
+    <div class="row"><div style="flex:1 1 420px;min-width:0"><p class="small" style="margin:0 0 6px">Row 0 of the GA4 table: next-token probabilities after [start]. Outline = original probability; fill = final probability.</p><div class="bars" id="l7-bars"></div></div>
+    <div style="flex:1 1 240px;min-width:0"><dl class="kv" id="l7-kv2"></dl><button class="act" type="button" id="l7-s">Sample 10 tokens</button><div class="hist" id="l7-h"></div></div></div><div id="l7-work"></div>
+    <h3 class="sub">Temperature on logits u = [2.0, 1.0, 0.5]</h3><div class="mwrap" id="l7-tt"></div>`;
+  let mode="k";
+  seg($("#l7-mode"),[["none","No truncation"],["k","Top-k"],["p","Top-p"]],"k",v=>{mode=v;render();});
+  ["l7-k","l7-p","l7-T"].forEach(i=>$("#"+i).addEventListener("input",render));
+  $("#l7-pre").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const p=b.dataset.p;
+    if(p==="k3"){mode="k";$("#l7-k").value=3;$("#l7-T").value=1;}
+    if(p==="g"){mode="k";$("#l7-k").value=1;$("#l7-T").value=1;}
+    if(p==="hot"){mode="none";$("#l7-T").value=2;}
+    $$("#l7-mode button").forEach(x=>{x.classList.toggle("on",x.dataset.v===mode);x.setAttribute("aria-pressed",x.dataset.v===mode)});render();});
+  let fin=p0.slice();
+  function render(){
+    const k=+$("#l7-k").value,p=+$("#l7-p").value,T=+$("#l7-T").value;
+    $("#l7-kv").textContent=k;$("#l7-pv").textContent=p.toFixed(2);$("#l7-Tv").textContent=T.toFixed(1);
+    $("#l7-k").disabled=mode!=="k";$("#l7-p").disabled=mode!=="p";
+    const pt0=p0.map(v=>Math.pow(v,1/T)), z=sum(pt0), pt=pt0.map(v=>v/z);
+    const order=pt.map((v,i)=>i).sort((a,b)=>pt[b]-pt[a]);
+    let keep=new Set(order);
+    if(mode==="k") keep=new Set(order.slice(0,k));
+    if(mode==="p"){keep=new Set();let c=0;for(const i of order){keep.add(i);c+=pt[i];if(c>=p-1e-9)break;}}
+    const mass=sum([...keep].map(i=>pt[i]));
+    fin=pt.map((v,i)=>keep.has(i)?v/mass:0);
+    const mx=Math.max(...fin,...p0);
+    $("#l7-bars").innerHTML=order.map(i=>`<div class="bar ${keep.has(i)?"":"drop"}"><span class="lab-t">${vocab[i]}</span><span class="track"><span class="fill" style="width:${(fin[i]/mx*100).toFixed(1)}%"></span><span class="ghostbar" style="width:${(p0[i]/mx*100).toFixed(1)}%"></span></span><span class="v">${fmt(fin[i],4)}</span></div>`).join("");
+    const top=order[0];
+    $("#l7-kv2").innerHTML=kv([
+      ["Kept set",`${keep.size} token${keep.size>1?"s":""}`,mode==="p"?"smallest set reaching p":mode==="k"?"k most likely":"all tokens"],
+      ["Kept mass before renormalising",fmt(mass,4),"divide each kept p by this"],
+      [`P(${vocab[top]}) after`,fmt(fin[top],4),`was ${fmt(p0[top],2)}`],
+      ["Behaviour",keep.size===1?"deterministic (= greedy)":"stochastic: sample from the kept set"]]);
+    const ks=[...keep], den=ks.length<=5?ks.map(i=>ft(pt[i],4)).join("+"):R`\textstyle\sum_{\text{${ks.length} kept}}P`;
+    const wl=[];
+    if(T!==1) wl.push(TD(R`P_T(\text{${vocab[top]}})=\frac{${ft(p0[top],2)}^{1/${ft(T,1)}}}{\sum_j p_j^{1/${ft(T,1)}}}=${ft(pt[top],4)}`));
+    wl.push(TD(R`\tilde P(\text{${vocab[top]}})=\frac{${ft(pt[top],4)}}{${den}}=\frac{${ft(pt[top],4)}}{${ft(mass,4)}}=${ft(fin[top],4)}`));
+    $("#l7-work").innerHTML=worked(...wl);
+    const u=[2,1,0.5];
+    $("#l7-tt").innerHTML=`<table class="plain"><thead><tr><th>T</th><th>P(u=2.0)</th><th>P(u=1.0)</th><th>P(u=0.5)</th></tr></thead><tbody>${[0.1,0.5,1,2,T].filter((v,i,a)=>a.indexOf(v)===i).sort((a,b)=>a-b).map(tt=>{const q=smRow(u.map(x=>x/tt));return `<tr${tt===T?' style="background:var(--chip)"':""}><td>${tt.toFixed(1)}</td>${q.map(v=>`<td>${fmt(v,4)}</td>`).join("")}</tr>`;}).join("")}</tbody></table><p class="small">T → 0 gives argmax (greedy); T → ∞ gives uniform. The order never changes (2026T1-Q6).</p>`;
+  }
+  $("#l7-s").addEventListener("click",()=>{const out=[];for(let n=0;n<10;n++){let r=Math.random(),c=0,pick=fin.length-1;for(let i=0;i<fin.length;i++){c+=fin[i];if(r<c){pick=i;break;}}out.push(vocab[pick]);}$("#l7-h").innerHTML=out.map(s=>`<span>${s}</span>`).join("");});
+  render();
+})();
+
+/* ---------- LAB 8: teacher forcing vs inference ---------- */
+(function(){
+  const target=["je","suis","heureux","⟨eos⟩"];
+  const tfIn=["⟨go⟩","je","suis","heureux"], tfOut=["je","content","heureux","⟨eos⟩"];
+  const infOut=["je","content","être","⟨eos⟩"], infIn=["⟨go⟩"].concat(infOut.slice(0,3));
+  const host=$("#b8");
+  host.innerHTML=`<div class="controls"><label class="f">step t <input id="l8-t" type="range" min="1" max="4" value="3"><span class="mono" id="l8-tv">3</span></label></div>
+    <div class="tf"><section><h4>Training with teacher forcing</h4><div id="l8-a"></div></section><section><h4>Inference (autoregressive)</h4><div id="l8-b"></div></section></div>
+    <div class="callout" id="l8-q"></div><div id="l8-work"></div>`;
+  $("#l8-t").addEventListener("input",render);
+  const grid=(rows,t,bad)=>`<div class="steps">${[1,2,3,4].map(i=>`<div class="h">t = ${i}</div>`).join("")}${rows.map(([lab,arr,mark])=>arr.map((v,i)=>`<div class="c ${i+1===t?"cur":""} ${i+1>t&&mark==="fut"?"fut":""} ${bad&&mark==="pred"&&v!==target[i]?"bad":""}" title="${lab}">${esc(v)}</div>`).join("")).join("")}</div>`;
+  function render(){
+    const t=+$("#l8-t").value; $("#l8-tv").textContent=t;
+    $("#l8-a").innerHTML=`<p class="small" style="margin:0 0 6px">rows: decoder input · prediction · target</p>`+grid([["input",tfIn,""],["prediction",tfOut,"pred"],["target",target,""]],t,true)+
+      `<p class="small">All four positions run in <b>1 pass</b> (the causal mask stops peeking). The wrong guess "content" at t = 2 is penalised, but t = 3 still receives the true "suis".</p>`;
+    $("#l8-b").innerHTML=`<p class="small" style="margin:0 0 6px">rows: decoder input · prediction (example)</p>`+grid([["input",infIn,"fut"],["prediction",infOut,"fut"]],t,false)+
+      `<p class="small"><b>${t} pass${t>1?"es":""}</b> so far: one per generated token. After the slip at t = 2, step 3 is fed "content", so the error carries forward (exposure bias).</p>`;
+    $("#l8-q").innerHTML=`At step ${t}, the teacher-forced decoder input is <b>${tfIn[t-1]}</b> (target shifted right); at inference it is <b>${infIn[t-1]}</b>. This is exactly 2025T3-Q3.`;
+    const tokT=s=>s.startsWith("⟨")?R`\langle\text{${s.slice(1,-1)}}\rangle`:R`\text{${s}}`;
+    $("#l8-work").innerHTML=worked(
+      TD(R`\text{teacher forcing: input}_{${t}}=y_{${t-1}}=${tokT(tfIn[t-1])}\qquad\qquad \text{inference: input}_{${t}}=\hat y_{${t-1}}=${tokT(infIn[t-1])}`),
+      TD(R`\text{loss at step }${t}=-\log P\big(${tokT(target[t-1])}\mid ${tfIn.slice(0,t).map(tokT).join(",")}\big),\qquad \text{passes: training }1,\ \text{inference }${t}`));
+  }
+  render();
+})();
+
+/* ---------- LAB 9: encoder-decoder parameters ---------- */
+(function(){
+  const host=$("#b9");
+  const F=[["d","d<sub>model</sub>",64],["h","heads h",4],["dk","d<sub>k</sub> per head",16],["ff","d<sub>ff</sub>",256],["N","layers N (each stack)",2],["vs","|V<sub>src</sub>|",1000],["vt","|V<sub>tgt</sub>|",1500]];
+  host.innerHTML=`<div class="controls">${F.map(([k,l,v])=>`<label class="f">${l} <input id="l9-${k}" type="number" min="1" value="${v}"></label>`).join("")}</div>
+    <div class="controls"><label class="f"><input type="checkbox" id="l9-fb"> FFN biases</label><label class="f"><input type="checkbox" id="l9-ln" checked> LayerNorm γ, β</label><label class="f"><input type="checkbox" id="l9-ab"> attention biases</label></div>
+    <div class="preset" id="l9-pre"><span>Preset</span><button class="ghost" type="button" data-p="ga2">GA2 Q1 = 2024T3-Q4–6</button><button class="ghost" type="button" data-p="slide">Slide encoder layer (512 / 8 / 2048)</button></div>
+    <div class="row"><div class="figwrap" id="l9-svg" style="flex:1 1 540px;min-width:0"></div><div style="flex:1 1 280px;min-width:0"><div class="callout" id="l9-detail"></div><dl class="kv" id="l9-kv"></dl></div></div><div id="l9-work"></div>`;
+  let sel="dec_x", hit="";
+  const g=k=>Math.max(1,Math.floor(+$("#l9-"+k).value||1));
+  F.forEach(([k])=>$("#l9-"+k).addEventListener("input",()=>{hit="";render();}));
+  ["fb","ln","ab"].forEach(k=>$("#l9-"+k).addEventListener("change",()=>{hit="";render();}));
+  $("#l9-pre").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
+    const v=b.dataset.p==="ga2"?{d:64,h:4,dk:16,ff:256,N:2,vs:1000,vt:1500,fb:false,ln:true,ab:false}:{d:512,h:8,dk:64,ff:2048,N:1,vs:37000,vt:37000,fb:true,ln:false,ab:false};
+    F.forEach(([k])=>$("#l9-"+k).value=v[k]); ["fb","ln","ab"].forEach(k=>$("#l9-"+k).checked=v[k]); hit=b.dataset.p; render();});
+  const B=[
+    ["enc_ln2","Add & Norm",30,150,"ln"],["enc_ffn","Feed-forward",30,195,"ffn"],["enc_ln1","Add & Norm",30,255,"ln"],["enc_mha","Multi-head self-attention",30,300,"mha"],["enc_emb","Input embedding + PE",30,385,"embs"],
+    ["out","Linear + softmax",320,18,"out"],["dec_ln3","Add & Norm",320,75,"ln"],["dec_ffn","Feed-forward",320,115,"ffn"],["dec_ln2","Add & Norm",320,165,"ln"],["dec_x","Cross-attention",320,205,"xmha"],["dec_ln1","Add & Norm",320,255,"ln"],["dec_m","Masked self-attention",320,300,"mmha"],["dec_emb","Output embedding + PE",320,385,"embt"]];
+  function counts(){
+    const d=g("d"),h=g("h"),dk=g("dk"),ff=g("ff"),N=g("N"),vs=g("vs"),vt=g("vt");
+    const mha=3*h*d*dk+h*dk*d+($("#l9-ab").checked?3*h*dk+d:0), ffn=2*d*ff+($("#l9-fb").checked?ff+d:0), ln=$("#l9-ln").checked?2*d:0;
+    const enc=mha+ffn+2*ln, dec=2*mha+ffn+3*ln;
+    return {d,h,dk,ff,N,vs,vt,mha,ffn,ln,enc,dec,layers:N*(enc+dec),embs:vs*d,embt:vt*d,out:d*vt};
+  }
+  function detail(c){
+    const k=B.find(b=>b[0]===sel)[4];
+    const txt={
+      mha:`<b>Self-attention</b>: Q, K, V from the same input. 3·h·d·d<sub>k</sub> + (h·d<sub>k</sub>)·d = <b>${big(c.mha)}</b>${$("#l9-ab").checked?" (with biases)":""}.`,
+      mmha:`<b>Masked self-attention</b>: same weights as any MHA, <b>${big(c.mha)}</b>. The causal mask has no parameters.`,
+      xmha:`<b>Cross-attention</b>: Q from the decoder (T<sub>t</sub> × d), K and V from the encoder output (T<sub>s</sub> × d). Scores are T<sub>t</sub> × T<sub>s</sub>. Same parameter count as self-attention: <b>${big(c.mha)}</b>.`,
+      ffn:`<b>Feed-forward</b>: d → d<sub>ff</sub> → d, applied to each position separately. 2·d·d<sub>ff</sub>${$("#l9-fb").checked?" + d<sub>ff</sub> + d":""} = <b>${big(c.ffn)}</b>.`,
+      ln:`<b>Add &amp; Norm</b>: residual add (no parameters) then LayerNorm with γ and β per feature: 2·d = <b>${big(c.ln)}</b>.`,
+      embs:`<b>Source embedding</b>: |V<sub>src</sub>| · d = <b>${big(c.embs)}</b>. Sinusoidal PE adds 0 parameters.`,
+      embt:`<b>Target embedding</b>: |V<sub>tgt</sub>| · d = <b>${big(c.embt)}</b>. During training it receives the target shifted right.`,
+      out:`<b>Output layer</b>: d · |V<sub>tgt</sub>| = <b>${big(c.out)}</b>, giving one T<sub>t</sub> × |V<sub>tgt</sub>| score table per sentence.`}[k];
+    $("#l9-detail").innerHTML=txt;
+  }
+  function render(){
+    const c=counts();
+    let s=`<svg viewBox="0 0 600 440" width="600" height="440" role="img" aria-label="Encoder-decoder block diagram">`;
+    s+=`<rect x="18" y="138" width="254" height="207" rx="10" fill="none" stroke="var(--line)" stroke-dasharray="4 3"/><text x="26" y="132" font-size="11" fill="var(--muted)">Encoder layer × ${c.N}</text>`;
+    s+=`<rect x="308" y="62" width="274" height="283" rx="10" fill="none" stroke="var(--line)" stroke-dasharray="4 3"/><text x="316" y="56" font-size="11" fill="var(--muted)">Decoder layer × ${c.N}</text>`;
+    const v=(x,y1,y2)=>`<line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" stroke="var(--muted)" stroke-width="1.4" marker-end="url(#ah)"/>`;
+    s+=`<defs><marker id="ah" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--muted)"/></marker></defs>`;
+    s+=v(145,385,330)+v(145,300,285)+v(145,255,225)+v(145,195,180);
+    s+=v(445,385,330)+v(445,300,285)+v(445,255,235)+v(445,205,195)+v(445,165,145)+v(445,115,105)+v(445,75,48);
+    s+=`<polyline points="145,150 145,110 296,110 296,220 318,220" fill="none" stroke="var(--accent)" stroke-width="1.8" marker-end="url(#ah)"/><text x="152" y="104" font-size="10.5" fill="var(--accent)">encoder output → K, V</text>`;
+    s+=`<text x="152" y="432" font-size="10.5" fill="var(--muted)">source tokens · T_s × d</text><text x="452" y="432" font-size="10.5" fill="var(--muted)">target shifted right · T_t × d</text><text x="452" y="12" font-size="10.5" fill="var(--muted)">T_t × |V_tgt|</text>`;
+    B.forEach(([id,l,x,y,k])=>{const w=x<300?230:250,on=id===sel;
+      s+=`<g class="blk" tabindex="0" role="button" data-id="${id}" aria-label="${l}" style="cursor:pointer"><rect x="${x}" y="${y}" width="${w}" height="30" rx="7" fill="${on?"var(--accent)":k==="ln"?"var(--bg)":"var(--chip)"}" stroke="${on?"var(--accent)":"var(--line)"}"/><text x="${x+10}" y="${y+19}" font-size="11.5" fill="${on?"var(--on-accent)":"var(--ink)"}">${l}</text><text x="${x+w-10}" y="${y+19}" font-size="10.5" text-anchor="end" fill="${on?"var(--on-accent)":"var(--muted)"}">${big({ln:c.ln,ffn:c.ffn,mha:c.mha,mmha:c.mha,xmha:c.mha,embs:c.embs,embt:c.embt,out:c.out}[k])}</text></g>`;});
+    s+="</svg>";
+    $("#l9-svg").innerHTML=s;
+    $$("#l9-svg .blk").forEach(el=>{const pick=()=>{sel=el.dataset.id;render();};el.addEventListener("click",pick);el.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();pick();}});});
+    detail(c);
+    $("#l9-kv").innerHTML=kv([
+      ["Encoder layer",big(c.enc),"MHA + FFN + 2 LN",hit==="slide"],
+      ["Decoder layer",big(c.dec),"2 MHA + FFN + 3 LN"],
+      [`All ${2*c.N} layers (no embeddings, no output)`,big(c.layers),`${c.N}·(${big(c.enc)} + ${big(c.dec)})`,hit==="ga2"],
+      ["Source embedding",big(c.embs),"|V_src| · d"],["Output layer",big(c.out),"d · |V_tgt|"],
+      ["Everything (separate target embedding)",big(c.layers+c.embs+c.embt+c.out)]]);
+    const ab=$("#l9-ab").checked, fb=$("#l9-fb").checked;
+    $("#l9-work").innerHTML=worked(
+      TD(R`\text{MHA}=3\cdot${c.h}\cdot${c.d}\cdot${c.dk}+${c.h}\cdot${c.dk}\cdot${c.d}${ab?R`+(3\cdot${c.h}\cdot${c.dk}+${c.d})`:""}=${bigT(c.mha)}`),
+      TD(R`\text{FFN}=2\cdot${c.d}\cdot${c.ff}${fb?R`+${c.ff}+${c.d}`:""}=${bigT(c.ffn)},\qquad \text{LN}=${c.ln?R`2\cdot${c.d}`:R`0\ (\text{off})`}=${bigT(c.ln)}`),
+      TD(R`\text{enc}=${bigT(c.mha)}+${bigT(c.ffn)}+2\cdot${bigT(c.ln)}=${bigT(c.enc)},\qquad \text{dec}=2\cdot${bigT(c.mha)}+${bigT(c.ffn)}+3\cdot${bigT(c.ln)}=${bigT(c.dec)}`),
+      TD(R`N\,(\text{enc}+\text{dec})=${c.N}\,(${bigT(c.enc)}+${bigT(c.dec)})=${bigT(c.layers)}`));
+  }
+  render();
+})();
+
+/* ---------- LAB 10: Bahdanau attention ---------- */
+(function(){
+  const S={s:[[1,2]],H:[[1,0],[0,1],[1,1]],mode:"add"};
+  const host=$("#b10");
+  host.innerHTML=`<div class="controls"><div class="seg" id="l10-m"></div></div>
+    <div class="preset"><span>Preset</span><button class="ghost" type="button" id="l10-p">2026T1-Q12–14</button></div>
+    <div class="row"><div id="l10-s"></div><div id="l10-H"></div><div class="figwrap" id="l10-svg" style="flex:1 1 360px;min-width:0"></div></div>
+    <div class="mwrap" id="l10-t" style="margin-top:12px"></div><dl class="kv" id="l10-kv"></dl><div id="l10-work"></div>`;
+  seg($("#l10-m"),[["add","Additive score Vᵀtanh(U·s + W·h) (seq2seq)"],["dot","Dot product s·h (self-attention style)"]],"add",v=>{S.mode=v;render();});
+  function build(){editMat($("#l10-s"),S.s,"decoder state s_{t−1}",render);editMat($("#l10-H"),S.H,"encoder states h_j",render,{rows:["h1","h2","h3"]});}
+  $("#l10-p").addEventListener("click",()=>{S.s=[[1,2]];S.H=[[1,0],[0,1],[1,1]];build();render();});
+  function render(){
+    const s=S.s[0], H=S.H;
+    const pre=H.map(h=>h.map((v,i)=>v+s[i])), th=pre.map(r=>r.map(Math.tanh));
+    const e=S.mode==="add"?th.map(r=>sum(r)):H.map(h=>sum(h.map((v,i)=>v*s[i])));
+    const a=smRow(e), c=s.map((_,i)=>sum(H.map((h,j)=>a[j]*h[i])));
+    $("#l10-t").innerHTML=`<table class="plain"><thead><tr><th>j</th><th>h_j</th>${S.mode==="add"?"<th>U·s + W·h_j</th><th>tanh</th>":""}<th>score e_j</th><th>exp(e_j)</th><th>α_j</th></tr></thead><tbody>${H.map((h,j)=>`<tr><td>${j+1}</td><td>[${h.map(v=>fmt(v,2)).join(", ")}]</td>${S.mode==="add"?`<td>[${pre[j].map(v=>fmt(v,2)).join(", ")}]</td><td>[${th[j].map(v=>fmt(v,4)).join(", ")}]</td>`:""}<td>${fmt(e[j],4)}</td><td>${fmt(Math.exp(e[j]),4)}</td><td>${fmt(a[j],4)}</td></tr>`).join("")}</tbody></table>
+      <p class="small">${S.mode==="add"?"U = W = I and V = [1, 1], as in the past paper, so the score is the sum of the tanh vector.":"Self-attention replaces the scoring network with a plain dot product of (projected) vectors."}</p>`;
+    $("#l10-kv").innerHTML=kv([["α_1",fmt(a[0],4),"softmax over all encoder states"],["context c_t = Σ α_j h_j",`[${c.map(v=>fmt(v,4)).join(", ")}]`],["Σ elements of c_t",fmt(sum(c),4)]]);
+    const col=v=>R`\begin{bmatrix}${v.map(x=>ft(x,2)).join(R`\\`)}\end{bmatrix}`;
+    const e1=S.mode==="add"
+      ?R`e_{t1}=V_a^{\top}\tanh\!\big(s_{t-1}+h_1\big)=${pre[0].map(v=>R`\tanh(${ft(v,2)})`).join("+")}=${th[0].map(v=>ft(v,4)).join("+")}=${ft(e[0],4)}`
+      :R`e_{t1}=s_{t-1}\cdot h_1=${s.map((v,i)=>`(${ft(v,2)})(${ft(H[0][i],2)})`).join("+")}=${ft(e[0],4)}`;
+    $("#l10-work").innerHTML=worked(TD(e1),
+      TD(R`\alpha_{t1}=\frac{e^{${ft(e[0],4)}}}{${e.map(v=>`e^{${ft(v,4)}}`).join("+")}}=${ft(a[0],4)}`),
+      TD(R`c_t=${a.map((x,j)=>R`${ft(x,4)}${col(H[j])}`).join("+")}=${col(c.map(v=>+v.toFixed(4)))},\qquad \textstyle\sum c_t=${ft(sum(c),4)}`));
+    let g=`<svg viewBox="0 0 400 170" width="400" height="170" role="img" aria-label="Attention weights from decoder state to encoder states">`;
+    const xs=[70,200,330];
+    g+=`<rect x="150" y="10" width="100" height="30" rx="7" fill="var(--chip)" stroke="var(--line)"/><text x="200" y="29" font-size="11.5" text-anchor="middle" fill="var(--ink)">s_(t−1)</text>`;
+    xs.forEach((x,j)=>{g+=`<line x1="200" y1="40" x2="${x}" y2="122" stroke="var(--accent)" stroke-width="${(1+12*a[j]).toFixed(1)}" stroke-linecap="round" opacity="0.85"/><rect x="${x-40}" y="122" width="80" height="30" rx="7" fill="var(--chip)" stroke="var(--line)"/><text x="${x}" y="141" font-size="11.5" text-anchor="middle" fill="var(--ink)">h${j+1}</text><text x="${(200+x)/2+(j===1?12:0)}" y="${82}" font-size="11" text-anchor="middle" fill="var(--ink)">α=${fmt(a[j],3)}</text>`;});
+    $("#l10-svg").innerHTML=g+"</svg>";
+  }
+  build(); render();
+})();
+
+/* ---------- LAB 11: sequence probability ---------- */
+(function(){
+  const vocab=["[start]","building","character","a","is","astronomy","science","experience","natural","[end]"];
+  const Y=[[0.05,0.02,0.14,0.07,0.09,0.41,0.08,0.05,0.08,0.01],[0.10,0.04,0.06,0.16,0.43,0.01,0.06,0.09,0.01,0.04],[0.05,0.07,0.28,0.29,0.03,0.08,0.04,0.08,0.04,0.04],[0.10,0.02,0.48,0.02,0.01,0.07,0.06,0.14,0.07,0.01],[0.08,0.29,0.04,0.01,0.04,0.03,0.25,0.05,0.15,0.06],[0.14,0.22,0.13,0.08,0.01,0.03,0.06,0.23,0.08,0.03]];
+  const greedy=Y.map(r=>r.indexOf(Math.max(...r)));
+  let pick=greedy.slice(), L=6;
+  const host=$("#b11");
+  host.innerHTML=`<div class="controls"><label class="f">sentence length <input id="l11-L" type="range" min="1" max="6" value="6"><span class="mono" id="l11-Lv">6</span></label></div>
+    <div class="preset" id="l11-pre"><span>Preset</span><button class="ghost" type="button" data-p="g">GA4 Q1b · the greedy sentence</button><button class="ghost" type="button" data-p="n">GA4 Q1c · "astronomy is a natural science"</button></div>
+    <p class="small" style="margin:0 0 6px">GA4's table. Row t is the distribution for the t-th word, computed along the <b>greedy</b> prefix. Click a cell to choose that word.</p>
+    <div class="mwrap" id="l11-tab"></div><dl class="kv" id="l11-kv"></dl><div id="l11-work"></div><div id="l11-msg"></div>`;
+  $("#l11-L").addEventListener("input",render);
+  $("#l11-pre").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
+    if(b.dataset.p==="g"){pick=greedy.slice();$("#l11-L").value=6;}
+    else{pick=greedy.slice();pick[3]=8;pick[4]=6;$("#l11-L").value=5;}
+    render();});
+  function render(){
+    L=+$("#l11-L").value; $("#l11-Lv").textContent=L;
+    const div=pick.slice(0,L).findIndex((c,t)=>c!==greedy[t]);
+    const valid=t=>div<0||t<=div;
+    $("#l11-tab").innerHTML=`<table class="plain"><thead><tr><th>t</th>${vocab.map(v=>`<th>${v}</th>`).join("")}</tr></thead><tbody>${Y.map((r,t)=>`<tr style="opacity:${t>=L?0.35:(valid(t)?1:0.5)}"><td>${t+1}</td>${r.map((p,j)=>{const on=pick[t]===j&&t<L, gr=greedy[t]===j;return `<td style="cursor:pointer;${on?heatBg(1):gr?"background:var(--chip)":""}" data-t="${t}" data-j="${j}" tabindex="0" role="button" aria-label="row ${t+1}, ${vocab[j]}, ${p}">${p.toFixed(2)}</td>`;}).join("")}</tr>`).join("")}</tbody></table>`;
+    $$("#l11-tab td[data-t]").forEach(td=>{const go=()=>{const t=+td.dataset.t;pick[t]=+td.dataset.j;for(let u=t+1;u<6;u++)pick[u]=greedy[u];if(t>=L){$("#l11-L").value=t+1;}render();};td.addEventListener("click",go);td.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}});});
+    const words=pick.slice(0,L).map(j=>vocab[j]);
+    const ok=div<0||div===L-1;
+    const P=pick.slice(0,L).reduce((a,j,t)=>a*Y[t][j],1);
+    const fac=pick.slice(0,L).map((j,t)=>Y[t][j].toFixed(2));
+    $("#l11-work").innerHTML=worked(ok
+      ?TD(R`P=${pick.slice(0,L).map((j,t)=>R`\underbrace{${fac[t]}}_{\text{${vocab[j]}}}`).join(R`\times`)}=${ft(P,6)},\qquad \log P=${ft(Math.log(P),4)}`)
+      :TD(R`P=${fac.slice(0,div+1).join(R`\times`)}\times\underbrace{\ ?\ \times\cdots}_{\text{row${div+2===L?"":"s"} }${div+2===L?L:R`${div+2}\text{–}${L}`}\text{ assume a different prefix}}\ \Rightarrow\ \text{answer }-1`));
+    $("#l11-kv").innerHTML=kv([["Your sentence",words.join(" ")],["P(sentence)",ok?fmt(P,6):"not given by this table",ok?pick.slice(0,L).map((j,t)=>Y[t][j].toFixed(2)).join(" × "):`leaves the greedy prefix at word ${div+1}`],["log P",ok?fmt(Math.log(P),4):"—"]]);
+    $("#l11-msg").innerHTML=ok?(div<0?`<div class="callout">This is the greedy path (the shaded cells). GA4 Q1b's answer: <b>0.0016</b>.</div>`:`<div class="callout">Only the last word left the greedy path, and that row is still conditioned on the right prefix, so the product is valid.</div>`)
+      :`<div class="warnbox">After word ${div+1} your prefix differs from the one the table was computed on, so ${div+2===L?`row ${L} is`:`rows ${div+2}–${L} are`} someone else's conditionals. A careful answer is <b>−1 (insufficient information)</b>; 2024T3-Q14 is keyed −1. GA4 Q1c's key says 0, reading it as "greedy decoding can never output this".</div>`;
+  }
+  render();
+})();
+
+/* ---------- LAB 12: masks ---------- */
+(function(){
+  const host=$("#b12");
+  host.innerHTML=`<div class="controls"><label class="f">source length T<sub>s</sub> <input id="l12-s" type="number" min="1" max="9" value="5"></label><label class="f">target length T<sub>t</sub> <input id="l12-t" type="number" min="1" max="9" value="4"></label><label class="f"><input type="checkbox" id="l12-pad" checked> last source token is [PAD]</label></div><div class="row" id="l12-g"></div><div id="l12-work"></div>`;
+  ["l12-s","l12-t","l12-pad"].forEach(i=>$("#"+i).addEventListener("input",render));
+  function grid(name,R,C,ok,rl,cl,note){
+    const M=[...Array(R)].map((_,i)=>[...Array(C)].map((_,j)=>ok(i,j)?0:-Infinity));
+    return `<div style="min-width:0">${matHTML(M,{name,rows:rl,cols:cl,d:0,cls:(i,j)=>ok(i,j)?"allowed":"masked"})}<p class="small" style="max-width:30ch">${note}</p></div>`;
+  }
+  function render(){
+    const Ts=Math.min(9,Math.max(1,+$("#l12-s").value||1)),Tt=Math.min(9,Math.max(1,+$("#l12-t").value||1)),pad=$("#l12-pad").checked;
+    const src=[...Array(Ts)].map((_,i)=>pad&&i===Ts-1?"PAD":"s"+(i+1)), tgt=[...Array(Tt)].map((_,i)=>"t"+(i+1));
+    const live=j=>!(pad&&j===Ts-1);
+    $("#l12-g").innerHTML=grid("encoder self-attention",Ts,Ts,(i,j)=>live(j),src,src,"Every token sees every token; only the padded column is blocked. (BERT works like this.)")+
+      grid("decoder self-attention (causal)",Tt,Tt,(i,j)=>j<=i,tgt,tgt,`Lower triangle only: ${Tt*(Tt-1)/2} masked cells = T(T−1)/2. (GPT works like this.)`)+
+      grid("cross-attention",Tt,Ts,(i,j)=>live(j),tgt,src,"T<sub>t</sub> × T<sub>s</sub>. No causal mask: the whole source is already known. Padding is still masked (2026T1-Q4 → c).");
+    $("#l12-work").innerHTML=worked(TD(R`\text{encoder: }${Ts}\times${Ts},\qquad \text{decoder: }${Tt}\times${Tt}\ \text{with }\tfrac{${Tt}\cdot${Tt-1}}{2}=${Tt*(Tt-1)/2}\text{ masked},\qquad \text{cross: }${Tt}\times${Ts}=${Tt*Ts}\text{ scores}${pad?R`\ (${Tt}\text{ of them on [PAD]})`:""}`));
+  }
+  render();
+})();
+
+/* ---------- LAB 13: GPT ---------- */
+(function(){
+  const host=$("#b13");
+  host.innerHTML=`<h3 class="sub" style="margin-top:4px">1 · Pre-training: every position predicts the next token</h3>
+    <div class="controls"><label class="f" style="flex:1 1 320px">text <input id="l13-x" type="text" value="I enjoyed the movie transformers" style="flex:1;min-width:0"></label><label class="f">batch B <input id="l13-B" type="number" min="1" value="32"></label></div>
+    <div class="mwrap" id="l13-shift"></div><dl class="kv" id="l13-kv"></dl><div id="l13-work"></div>
+    <h3 class="sub">2 · Fine-tuning: how inputs are wrapped (GPT-1, slides p.39–42)</h3>
+    <div class="controls"><div class="seg" id="l13-task"></div></div><div id="l13-fmt"></div>
+    <h3 class="sub">3 · Where GPT-1's 116,461,056 parameters live</h3><div id="l13-par"></div>`;
+  $("#l13-x").addEventListener("input",render); $("#l13-B").addEventListener("input",render);
+  let task="cls";
+  seg($("#l13-task"),[["cls","Classification"],["ent","Entailment"],["mc","Multiple choice"],["sim","Similarity (paper only)"]],"cls",v=>{task=v;fmtRender();});
+  const box=(t,k)=>`<span style="display:inline-block;font:500 12.5px var(--f-mono);padding:4px 8px;margin:2px;border-radius:6px;border:1px solid var(--line);background:${k==="sp"?"color-mix(in oklab,var(--accent) 20%,var(--surface))":k==="hd"?"var(--accent)":"var(--surface)"};color:${k==="hd"?"var(--on-accent)":"var(--ink)"}">${esc(t)}</span>`;
+  function fmtRender(){
+    const seq=(...p)=>`<div style="margin:6px 0">${p.map(x=>x.startsWith("<")||x==="$"?box(x,"sp"):box(x,"")).join("")} → ${box("h at <e>","")} → ${box("Linear","hd")}</div>`;
+    const html={
+      cls:seq("<s>","the","movie","was","great","<e>")+`<p class="small">Softmax over the classes. Labels are needed: this is supervised.</p>`,
+      ent:seq("<s>","A soccer game with multiple males playing","$","Some men are playing a sport","<e>")+`<p class="small">The delimiter <span class="mono">$</span> separates premise and hypothesis.</p>`,
+      mc:["Choice 1","Choice 2","Choice 3"].map(c=>seq("<s>","Question","$",c,"<e>")).join("")+`<p class="small">One forward pass per choice; each gives one score; softmax across the choices, not the vocabulary.</p>`,
+      sim:seq("<s>","Sentence A","$","Sentence B","<e>")+seq("<s>","Sentence B","$","Sentence A","<e>")+`<p class="small">Both orders, final states added element-wise (GPT-1 paper; not on the slides).</p>`}[task];
+    $("#l13-fmt").innerHTML=html;
+  }
+  function render(){
+    const w=$("#l13-x").value.trim().split(/\s+/).filter(Boolean), B=Math.max(1,+$("#l13-B").value||1), T=w.length;
+    if(T<2){$("#l13-shift").innerHTML=`<p class="small">Type at least two words.</p>`;$("#l13-kv").innerHTML="";return;}
+    $("#l13-shift").innerHTML=`<table class="plain"><tbody><tr><th>input (sees only its left)</th>${w.slice(0,-1).map(x=>`<td>${esc(x)}</td>`).join("")}<td style="color:var(--muted)">${esc(w[T-1])}</td></tr><tr><th>target</th>${w.slice(1).map(x=>`<td style="${heatBg(0.35)}">${esc(x)}</td>`).join("")}<td style="color:var(--muted)">—</td></tr></tbody></table>`;
+    $("#l13-kv").innerHTML=kv([["Tokens T",String(T)],["Targets per sequence",String(T-1),"T − 1 (no BOS: the last token has nothing to predict)"],["Targets in the batch",big(B*(T-1)),"B · (T − 1)"],["Forward passes needed","1","teacher forcing + causal mask"]]);
+    $("#l13-work").innerHTML=worked(
+      TD(R`\mathcal{L}=-\Big[${w.slice(1).map((x,i)=>R`\log P(\text{${tx(x)}}\mid\text{${tx(w.slice(0,i+1).join(" "))}})`).slice(0,3).join("+")}${T-1>3?R`+\cdots`:""}\Big],\qquad B\,(T-1)=${B}\cdot${T-1}=${bigT(B*(T-1))}\text{ targets}`),
+      TD(R`40478\cdot768+512\cdot768+12\big(4\cdot768^2+2\cdot768\cdot3072+3072+768\big)=${bigT(40478*768+512*768+12*(4*768*768+2*768*3072+3072+768))}`));
+  }
+  const parts=[["Token embedding 40478 × 768",40478*768,"var(--accent)"],["Position embedding 512 × 768",512*768,"var(--ok)"],["12 × attention 4·768²",12*4*768*768,"var(--neg)"],["12 × FFN 2·768·3072 + 3072 + 768",12*(2*768*3072+3072+768),"var(--muted)"]];
+  const tot=sum(parts.map(p=>p[1]));
+  $("#l13-par").innerHTML=`<div class="split" style="height:30px">${parts.map(p=>`<div style="flex:${p[1]};background:${p[2]}" title="${p[0]}"></div>`).join("")}</div>
+    <table class="plain"><tbody>${parts.map(p=>`<tr><td><span style="color:${p[2]}">■</span> ${p[0]}</td><td>${big(p[1])}</td><td>${fmt(100*p[1]/tot,1)}%</td></tr>`).join("")}<tr><th>Total (slide recipe, tied output layer)</th><th>${big(tot)}</th><th></th></tr></tbody></table>`;
+  fmtRender(); render();
+})();
+
+/* ---------- LAB 14: MLM ---------- */
+(function(){
+  let seed=7; const rnd=()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};
+  const words="the model reads the whole sentence at once and learns to fill in the hidden words using context from both sides".split(" ");
+  const randWords=["piano","river","green","seven","table","quietly","cloud"];
+  const host=$("#b14");
+  host.innerHTML=`<div class="controls"><button class="act" type="button" id="l14-go">Mask a new sample</button><span class="small">${words.length} tokens → about 15% = ${fmt(0.15*words.length,1)} picked</span></div>
+    <div id="l14-row" style="display:flex;flex-wrap:wrap;gap:8px 4px;align-items:center;line-height:1.8"></div><p class="small"><span style="${heatBg(0.9)};padding:1px 6px;border-radius:4px">[MASK]</span> 80% · <span style="background:color-mix(in oklab,var(--neg) 30%,var(--surface));padding:1px 6px;border-radius:4px">random word</span> 10% · <span style="outline:2px solid var(--accent);padding:1px 6px;border-radius:4px">unchanged</span> 10% · underline = position in the loss</p>
+    <h3 class="sub">Expected counts for a sequence of T tokens</h3>
+    <div class="controls"><label class="f">T <input id="l14-T" type="number" min="1" value="512"></label></div><dl class="kv" id="l14-kv"></dl>
+    <h3 class="sub">GA4 Q2: "Astronomy is a [MASK] building [MASK]"</h3>
+    <div class="controls"><div class="seg" id="l14-m"></div></div><div class="mwrap" id="l14-ga"></div><dl class="kv" id="l14-kv2"></dl><div id="l14-work"></div>`;
+  function sample(){
+    const n=words.length, k=Math.max(1,Math.round(0.15*n)), idx=[...Array(n).keys()];
+    for(let i=n-1;i>0;i--){const j=Math.floor(rnd()*(i+1));[idx[i],idx[j]]=[idx[j],idx[i]];}
+    const sel=new Set(idx.slice(0,k)), act={};
+    sel.forEach(i=>{const r=rnd();act[i]=r<0.8?"mask":r<0.9?"rand":"keep";});
+    $("#l14-row").innerHTML=words.map((w,i)=>{if(!sel.has(i))return `<span class="mono" style="margin-right:6px">${w}</span>`;
+      const a=act[i], st=a==="mask"?heatBg(0.9):a==="rand"?"background:color-mix(in oklab,var(--neg) 30%,var(--surface))":"outline:2px solid var(--accent)";
+      const shown=a==="mask"?"[MASK]":a==="rand"?randWords[Math.floor(rnd()*randWords.length)]:w;
+      return `<span class="mono" style="${st};padding:2px 6px;border-radius:4px;margin-right:6px;text-decoration:underline;text-underline-offset:4px" title="original: ${w}">${shown}</span>`;}).join("");
+  }
+  $("#l14-go").addEventListener("click",()=>{seed=Date.now()&0xffffffff;sample();});
+  $("#l14-T").addEventListener("input",counts);
+  function counts(){const T=Math.max(1,+$("#l14-T").value||1);$("#l14-kv").innerHTML=kv([["Picked (all in the loss)",fmt(0.15*T,2),"0.15·T"],["Shown as [MASK]",fmt(0.12*T,2),"0.8 × 0.15 = 12% of all tokens"],["Replaced by a random word",fmt(0.015*T,2),"0.1 × 0.15"],["Left unchanged",fmt(0.015*T,2),"0.1 × 0.15"]]);}
+  const vocab=["[CLS]","building","character","a","is","astronomy","science","experience","natural","[SEP]"];
+  const Y=[[0.05,0.02,0.41,0.07,0.09,0.14,0.08,0.05,0.08,0.01],[0.10,0.04,0.06,0.16,0.04,0.01,0.06,0.09,0.01,0.43],[0.05,0.07,0.28,0.03,0.29,0.08,0.04,0.08,0.04,0.04],[0.10,0.02,0.14,0.02,0.01,0.07,0.06,0.48,0.07,0.01],[0.08,0.29,0.04,0.01,0.04,0.03,0.25,0.05,0.15,0.06],[0.14,0.13,0.22,0.08,0.01,0.03,0.06,0.23,0.08,0.03]];
+  const inp=["Astronomy","is","a","[MASK]","building","[MASK]"], truth=[5,4,3,2,1,7], masked=[3,5];
+  let m="right";
+  seg($("#l14-m"),[["right","Loss on the masked positions (correct)"],["all","Every position (the trap)"]],"right",v=>{m=v;ga();});
+  function ga(){
+    const use=m==="right"?masked:[0,1,2,3,4,5];
+    $("#l14-ga").innerHTML=`<table class="plain"><thead><tr><th>pos</th><th>input</th><th>true word</th><th>P(true)</th><th>−ln P</th></tr></thead><tbody>${inp.map((w,i)=>`<tr style="${use.includes(i)?"background:var(--chip)":"opacity:.5"}"><td>${i}</td><td>${w}</td><td>${vocab[truth[i]]}</td><td>${Y[i][truth[i]].toFixed(2)}</td><td>${use.includes(i)?fmt(-Math.log(Y[i][truth[i]]),4):"—"}</td></tr>`).join("")}</tbody></table>`;
+    const L=use.map(i=>-Math.log(Y[i][truth[i]]));
+    $("#l14-kv2").innerHTML=kv([["Mean loss",fmt(sum(L)/L.length,4),m==="right"?"accepted range 1.7–1.8":"wrong: unmasked words are not predicted",m==="right"],["Sum of losses",fmt(sum(L),4),m==="right"?"accepted range 3.3–3.5":""]]);
+    $("#l14-work").innerHTML=worked(TD(R`\mathcal{L}=\frac{${use.map(i=>R`-\ln ${Y[i][truth[i]].toFixed(2)}`).join("")}}{${use.length}}=\frac{${L.map(v=>ft(v,4)).join("+")}}{${use.length}}=${ft(sum(L)/L.length,4)}\qquad(\text{sum}=${ft(sum(L),4)})`));
+  }
+  sample(); counts(); ga();
+})();
+
+/* ---------- LAB 15: BERT input / heads / QA ---------- */
+(function(){
+  const host=$("#b15");
+  host.innerHTML=`<h3 class="sub" style="margin-top:4px">1 · Input = token + segment + position</h3>
+    <div class="controls"><label class="f" style="flex:1 1 240px">sentence A <input id="l15-a" type="text" value="my dog is cute" style="flex:1;min-width:0"></label><label class="f" style="flex:1 1 240px">sentence B <input id="l15-b" type="text" value="he likes playing" style="flex:1;min-width:0"></label></div>
+    <div class="mwrap" id="l15-emb"></div>
+    <h3 class="sub">2 · Which output feeds which head</h3><div class="controls"><div class="seg" id="l15-h"></div></div><div id="l15-head"></div>
+    <h3 class="sub">3 · Question answering: start and end vectors</h3>
+    <div class="controls"><div class="seg" id="l15-q"></div></div><div id="l15-qa"></div><div id="l15-work"></div>
+    <h3 class="sub">4 · BERT-base parameters (slide recipe)</h3><div id="l15-par"></div>`;
+  ["l15-a","l15-b"].forEach(i=>$("#"+i).addEventListener("input",emb));
+  function toks(){const a=$("#l15-a").value.trim().split(/\s+/).filter(Boolean),b=$("#l15-b").value.trim().split(/\s+/).filter(Boolean);return [["[CLS]","A"]].concat(a.map(w=>[w,"A"]),[["[SEP]","A"]],b.map(w=>[w,"B"]),b.length?[["[SEP]","B"]]:[]);}
+  function emb(){
+    const T=toks();
+    const cell=(t,bg)=>`<td style="background:${bg};text-align:center">${esc(t)}</td>`;
+    $("#l15-emb").innerHTML=`<table class="plain" style="border-collapse:separate;border-spacing:3px"><tbody>
+      <tr><th>input</th>${T.map(([w])=>`<td style="text-align:center;font-weight:600">${esc(w)}</td>`).join("")}</tr>
+      <tr><th>token</th>${T.map(([w])=>cell("E_"+w,"color-mix(in oklab,var(--accent) 16%,var(--surface))")).join("")}</tr>
+      <tr><th>+ segment</th>${T.map(([,s])=>cell("E_"+s,s==="A"?"color-mix(in oklab,var(--ok) 18%,var(--surface))":"color-mix(in oklab,var(--neg) 18%,var(--surface))")).join("")}</tr>
+      <tr><th>+ position</th>${T.map((_,i)=>cell("E_"+i,"var(--bg)")).join("")}</tr></tbody></table>
+      <p class="small">${T.length} tokens, each a 768-d sum of three learned vectors. A single-sentence input uses E_A everywhere: the segment embedding is never switched off (2026T1-Q5).</p>`;
+  }
+  let head="nsp";
+  seg($("#l15-h"),[["nsp","NSP"],["cls","Sentence classification"],["tag","Token tagging"]],"nsp",v=>{head=v;heads();});
+  function heads(){
+    const T=toks();
+    const use=i=>head==="tag"?true:i===0;
+    $("#l15-head").innerHTML=`<div style="display:flex;flex-wrap:wrap;gap:4px">${T.map(([w],i)=>`<span class="mono" style="padding:4px 8px;border-radius:6px;border:1px solid var(--line);${use(i)?heatBg(0.85):""}">h(${esc(w)})</span>`).join("")}</div>
+      <p class="small">${{nsp:"Only the final [CLS] vector goes to a 2-way classifier: IsNext / NotNext. Pre-training uses 50% real next sentences and 50% random ones.",cls:"Fine-tuning for sentiment or spam: [CLS] → Linear → softmax over classes, and all of BERT's weights are trained (2026T1-Q7). As a frozen feature extractor, the course also feeds [CLS] (GA4 Q3).",tag:"Named-entity tagging: every token's vector gets its own classifier output."}[head]}</p>`;
+  }
+  const para="the lander used a small neural network to steer its descent and touched down near the south pole".split(" ");
+  const cases={ok:{s:[0,0,0,1,3.4,1,0.5,0,0,0,0,0,0,0,0,0,0,0],e:[0,0,0,0,0,1,3.5,0.5,0,0,0,0,0,0,0,0,0,0]},bad:{s:[0,0,0,0,0,0,0,0,0,0,0,0,1,3,1,0,0,0],e:[0,0,0,0,0,1,3.2,1,0,0,0,0,0,0,0,0,0,0]}};
+  let qc="ok";
+  seg($("#l15-q"),[["ok","Valid span"],["bad","End before start"]],"ok",v=>{qc=v;qa();});
+  function qa(){
+    const c=cases[qc], s=smRow(c.s), e=smRow(c.e), i=s.indexOf(Math.max(...s)), j=e.indexOf(Math.max(...e)), mx=Math.max(...s,...e);
+    const bars=(p,lab)=>`<div class="small" style="margin:6px 0 2px">${lab}</div><div style="display:flex;align-items:flex-end;gap:3px;height:60px">${p.map((v,k)=>`<div title="${para[k]}: ${v.toFixed(3)}" style="flex:1;min-width:0;height:${Math.max(2,v/mx*58)}px;background:${(lab.startsWith("start")?k===i:k===j)?"var(--accent)":"var(--line)"};border-radius:3px 3px 0 0"></div>`).join("")}</div>`;
+    $("#l15-qa").innerHTML=`<p class="small" style="margin:0">Question: "What steered the descent?" Input: [CLS] question [SEP] paragraph. Softmax runs over paragraph positions only. (Toy scores, for illustration.)</p>`+bars(s,"start probability s_i = softmax(S·h_i)")+bars(e,"end probability e_i = softmax(E·h_i)")+
+      `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px">${para.map((w,k)=>`<span class="mono" style="padding:3px 6px;border-radius:5px;${j>=i&&k>=i&&k<=j?heatBg(0.85):""};${k===i||k===j?"outline:1px solid var(--accent)":""}">${w}</span>`).join("")}</div>`+
+      (j>=i?`<div class="callout">argmax s = word ${i+1}, argmax e = word ${j+1}: answer "<b>${para.slice(i,j+1).join(" ")}</b>".</div>`:`<div class="warnbox">argmax e (word ${j+1}) comes before argmax s (word ${i+1}). The slides' rule returns the <b>empty string</b>: the answer is not in the paragraph [Week 4.2 LLM p.35].</div>`);
+    $("#l15-work").innerHTML=worked(
+      TD(R`\arg\max_i s_i=${i+1}\ \ (s_{${i+1}}=${ft(s[i],3)}),\qquad \arg\max_j e_j=${j+1}\ \ (e_{${j+1}}=${ft(e[j],3)}),\qquad ${j>=i?R`${j+1}\ge${i+1}\ \Rightarrow\ \text{span } ${i+1}\ldots${j+1}`:R`${j+1}<${i+1}\ \Rightarrow\ \text{empty answer}`}`),
+      TD(R`\#\text{params}=(30000+2+512)\cdot768+12\big(4\cdot768^2+2\cdot768\cdot3072+3072+768\big)=${bigT((30000+2+512)*768+12*(4*768*768+2*768*3072+3072+768))}`));
+  }
+  const P=[["Token embedding 30000 × 768",30000*768],["Segment 2 × 768",2*768],["Position 512 × 768",512*768],["12 layers × (4·768² + 2·768·3072 + 3072 + 768)",12*(4*768*768+2*768*3072+3072+768)]];
+  $("#l15-par").innerHTML=`<table class="plain"><tbody>${P.map(p=>`<tr><td>${p[0]}</td><td>${big(p[1])}</td></tr>`).join("")}<tr><th>Total</th><th>${big(sum(P.map(p=>p[1])))}</th></tr></tbody></table><p class="small">The slide prints 107.4M; this recipe gives 108.4M. The BERT paper rounds to 110M (it also counts LayerNorms, biases and the pooler).</p>`;
+  emb(); heads(); qa();
+})();
+
+/* ---------- LAB 16: BERT vs GPT ---------- */
+(function(){
+  const w="the cat sat on the mat".split(" ");
+  const host=$("#b16");
+  host.innerHTML=`<div class="controls"><label class="f">token in focus <input id="l16-i" type="range" min="1" max="${w.length}" value="3"><span class="mono" id="l16-iv"></span></label></div><div id="l16-v"></div>
+    <div class="mwrap" style="margin-top:14px"><table class="plain"><thead><tr><th></th><th>BERT (encoder-only)</th><th>GPT (decoder-only)</th></tr></thead><tbody>
+    <tr><td>Attention mask</td><td>none: sees left and right</td><td>causal: sees left only</td></tr>
+    <tr><td>Pre-training objective</td><td>MLM (15%, 80/10/10) + NSP</td><td>next-token prediction (CLM)</td></tr>
+    <tr><td>Loss computed at</td><td>picked positions only</td><td>every position</td></tr>
+    <tr><td>Special tokens</td><td>[CLS], [SEP], [MASK]</td><td>&lt;s&gt;, $, &lt;e&gt; (for fine-tuning)</td></tr>
+    <tr><td>Good at</td><td>classification, tagging, QA, fill-in-the-blank</td><td>text generation; fine-tuned classification</td></tr>
+    <tr><td>Base size</td><td>12 layers, 768, 12 heads, ≈110M</td><td>12 layers, 768, 12 heads, ≈117M</td></tr>
+    </tbody></table></div>`;
+  $("#l16-i").addEventListener("input",render);
+  function row(lab,see){const i=+$("#l16-i").value-1;return `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:6px 0"><span class="small" style="min-width:4.5em">${lab}</span>${w.map((x,k)=>`<span class="mono" style="padding:4px 9px;border-radius:6px;border:1px solid var(--line);${k===i?"outline:2px solid var(--accent);":""}${see(k,i)?heatBg(0.75):"opacity:.45"}">${x}</span>`).join("")}</div>`;}
+  function render(){const i=+$("#l16-i").value;$("#l16-iv").textContent=`#${i} "${w[i-1]}"`;
+    $("#l16-v").innerHTML=row("BERT",()=>true)+row("GPT",(k,i)=>k<=i)+`<p class="small">Shaded = tokens that "${w[i-1]}" can attend to.</p>`+
+      worked(TD(R`\text{BERT: }P\big(\text{${w[i-1]}}\mid ${w.filter((_,k)=>k!==i-1).map(x=>R`\text{${x}}`).join(",")}\big)\qquad \text{GPT: }P\big(\text{${w[i-1]}}\mid ${i>1?w.slice(0,i-1).map(x=>R`\text{${x}}`).join(","):R`\langle s\rangle`}\big)`));}
+  render();
+})();
+
+/* ---------- navigation ---------- */
+(function(){
+  const labs=$$("section.lab"), groups={};
+  labs.forEach(s=>{(groups[s.dataset.week]=groups[s.dataset.week]||[]).push(s);});
+  const names={"Transformer":"Transformer (L1–L10)","LM & GPT":"Language models & GPT (L11–L16)","Decoding":"Decoding (L17–L22)","BERT":"BERT (L21–L25)"};
+  const order=["Transformer","LM & GPT","Decoding","BERT"].filter(k=>groups[k]);
+  $("#side").innerHTML=order.map(k=>`<h3>${names[k]}</h3>`+groups[k].map(s=>`<a href="#${s.id}"><span class="n">${s.id.replace("lab","")}</span><span>${$("h2",s).textContent}</span></a>`).join("")).join("");
+  $("#jump").innerHTML=labs.map(s=>`<option value="${s.id}">${s.id.replace("lab","Lab ")} · ${$("h2",s).textContent}</option>`).join("");
+  $("#jump").addEventListener("change",e=>{location.hash=e.target.value;});
+})();
+renderStatic();
+</script>
+</body>
+</html>
